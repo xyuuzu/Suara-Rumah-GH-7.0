@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where python *)",
+      "Bash(where pip *)",
+      "Bash(where redis-server *)",
+      "Bash(where node *)",
+      "Bash(venv/Scripts/python.exe --version)",
+      "Bash(py -0p)",
+      "Bash(py --list)",
+      "Bash(/c/Python313/python.exe -m pip --version)",
+      "Bash(.venv/Scripts/python.exe -m pip list)",
+      "Bash(rm -rf /c/garudaHack/venv /c/garudaHack/.venv)",
+      "Bash(/c/Python313/python.exe -m venv /c/garudaHack/venv)",
+      "Bash(/c/garudaHack/venv/Scripts/python.exe --version)",
+      "Bash(\"/c/Program Files/Git/usr/bin/rm.exe\" -rf \"/c/garudaHack/venv\" \"/c/garudaHack/.venv\")",
+      "Bash(echo \"exit:$?\")",
+      "Bash(/c/garudaHack/venv/Scripts/python.exe -m pip --version)",
+      "Bash(venv/Scripts/python.exe -m pip install -r requirements.txt --disable-pip-version-check)",
+      "WebSearch",
+      "Bash(venv/Scripts/python.exe -c \"import os; p=r'C:\\\\Users\\\\VICTUS\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--garudaHack\\\\0ba57304-8226-4fb5-af62-06106233e087\\\\tasks\\\\bbyd9q8js.output'; print\\(os.path.getsize\\(p\\)\\)\")",
+      "Bash(venv/Scripts/python.exe -m pip install --prefer-binary -r requirements.txt --disable-pip-version-check)",
+      "Bash(venv/Scripts/python.exe -m pip install --prefer-binary --only-binary=numpy,scipy,scikit-learn,pandas -r requirements.txt --disable-pip-version-check)",
+      "Bash(venv/Scripts/python.exe -m pip install --prefer-binary --only-binary=numpy,scipy,scikit-learn,pandas -r requirements.txt --disable-pip-version-check --timeout 60)",
+      "Bash(venv/Scripts/python.exe ml/train_text_model.py)",
+      "Bash(venv/Scripts/python.exe -m uvicorn app.main:app --port 8000)",
+      "Bash(curl -s http://127.0.0.1:8000/)",
+      "Bash(curl -s -X POST http://127.0.0.1:8000/predict-text -H \"Content-Type: application/json\" -d '{\"text\": \"aku bunuh kamu kalau macam-macam\"}')",
+      "Bash(curl -s -X POST http://127.0.0.1:8000/predict-text -H \"Content-Type: application/json\" -d '{\"text\": \"hari ini aku senang sekali jalan-jalan\"}')",
+      "Bash(venv/Scripts/python.exe -c ' *)",
+      "Bash(\"/c/Program Files/Git/usr/bin/rm.exe\" -f ml/dataset/kdrt/*.wav ml/dataset/normal/*.wav)",
+      "Bash(\"/c/Program Files/Git/usr/bin/cp.exe\" \"Data sound kdrt/high confident/\"*.MP3 ml/dataset/kdrt/)",
+      "Bash(\"/c/Program Files/Git/usr/bin/cp.exe\" \"Data sound kdrt/low confident/\"*.MP3 ml/dataset/normal/)",
+      "Bash(\"/c/Program Files/Git/usr/bin/cp.exe\" \"Data sound kdrt/low confident/\"*.mp3 ml/dataset/normal/)",
+      "Bash(venv/Scripts/python.exe ml/train_model.py)"
+    ]
+  }
+}

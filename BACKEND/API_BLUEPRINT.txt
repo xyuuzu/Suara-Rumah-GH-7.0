@@ -1,0 +1,296 @@
+====================================================================
+SUARA RUMAH - API BLUEPRINT (buat tim Mobile / Kotlin)
+====================================================================
+Base URL (dev lokal): http://127.0.0.1:8000
+Base URL (setelah deploy Railway/Render): isi sendiri pas udah ada
+
+Dokumen ini fokus ke KONTRAK INPUT/OUTPUT tiap endpoint, khususnya
+endpoint utama /predict-features yang basisnya cuma 3 angka: RMS, ZCR,
+PEAK -- sesuai yang diekstrak on-device (Kotlin) dan ditampilkan di
+dashboard app (lihat panel "Data Terakhir").
+
+Semua request/response format JSON.
+
+>> TIDAK ADA header auth (X-Api-Key dkk) buat sekarang -- sengaja
+   dilepas biar frontend ga keblokir 401 pas development/demo. Device
+   diidentifikasi cukup lewat `device_id` biasa (string bebas, bisa
+   generate sendiri di app pertama kali install, mis. UUID acak yang
+   disimpan lokal, atau sementara hardcode "test-device" buat demo).
+   Endpoint /devices/{device_id}/... ambil device_id dari URL path,
+   endpoint /predict-features ambil dari field "device_id" di body.
+   Ini BUKAN production-ready (siapa aja yang tau device_id bisa akses
+   data itu) -- kalau mau dikembaliin ke mode aman, lihat catatan di
+   bagian GAP paling bawah.
+
+--------------------------------------------------------------------
+0. CARA TESTING CEPAT (buat temen yang mau coba tanpa ngoding)
+--------------------------------------------------------------------
+Ada 2 cara, pilih salah satu:
+
+A) Swagger UI (paling gampang, ga perlu install apa-apa)
+   1. Jalanin backend: uvicorn app.main:app --reload
+   2. Buka browser: http://127.0.0.1:8000/docs
+   3. Semua endpoint udah muncul otomatis + contoh dummy value udah
+      keisi duluan (klik endpoint -> "Try it out" -> "Execute"). Ga
+      perlu isi header apa pun.
+
+B) Postman Collection (enak buat testing berulang, hasil kesimpan)
+   1. Buka Postman -> Import -> pilih file postman_collection.json
+      (ada di root project).
+   2. Semua request udah pakai device_id dummy ("test-device") di
+      body/URL -- tinggal jalanin urut dari atas ke bawah.
+   3. Folder "2. Kirim Fitur Suara" ada 4 contoh (normal, crash, kdrt
+      #1, kdrt #2) -- jalanin KDRT #1 lalu KDRT #2 dalam waktu
+      berdekatan (<30 detik) buat lihat "escalating: true" +
+      alert_id otomatis kesimpan buat dipake di folder "4. Follow-up
+      Alert".
+   4. Ganti variable "base_url" di collection kalau backend-nya
+      ga jalan di localhost.
+
+--------------------------------------------------------------------
+1. (OPSIONAL) REGISTRASI DEVICE
+--------------------------------------------------------------------
+POST /devices/register
+Request body: (kosong)
+
+Response 200:
+{
+  "device_id": "b3f1c9e2-....",
+  "api_key": "a1b2c3...48 hex char"
+}
+
+Endpoint ini masih ada tapi SEKARANG OPSIONAL -- ga ada endpoint lain
+yang cek/butuh "api_key" ini lagi. Boleh dipakai kalau mau generate
+device_id acak, atau app boleh langsung generate device_id sendiri
+(mis. UUID lokal) tanpa manggil endpoint ini sama sekali.
+
+--------------------------------------------------------------------
+2. KIRIM FITUR SUARA (dipanggil BERULANG KALI, tiap rolling buffer
+   audio selesai diproses jadi angka di device)
+--------------------------------------------------------------------
+POST /predict-features
+Request body:
+{
+  "device_id": "test-device",   // WAJIB, identitas device (bebas, string apa aja)
+  "rms": 0.041,                 // float, RMS amplitude (loudness) dari buffer
+  "zcr": 0.054,                 // float, zero-crossing rate
+  "peak": 1.0,                  // float, peak amplitude (0.0 - 1.0)
+  "latitude": -0.502106,        // optional, float, GPS device kalau ada
+  "longitude": 117.155594       // optional, float
+}
+
+Response 200 (contoh match sama screenshot dashboard, angka peak
+tinggi + RMS/ZCR rendah = pola "bantingan"):
+{
+  "label": "bantingan",          // "normal" | "bantingan" | "teriakan" | "darurat_sos"
+  "status": "BANTINGAN",          // label.upper() -- langsung dipake buat badge di UI
+  "confidence": 0.94,             // probabilitas kelas yang menang (dari model, bukan tebakan)
+  "probabilities": {              // probabilitas semua kelas, buat siapa yang mau nampilin detail
+    "normal": 0.01, "bantingan": 0.94, "teriakan": 0.03, "darurat_sos": 0.02
+  },
+  "anomaly": true,                // true kalau label != "normal"
+  "sos": false,                   // true KHUSUS kalau label == "darurat_sos"
+  "anomaly_count_in_window": 1,   // jumlah anomali dalam 30 detik terakhir (ga dipake buat darurat_sos)
+  "escalating": false,            // true kalau siap trigger alert (lihat aturan di bawah)
+  "alert_triggered": false,       // true kalau alert WA beneran terkirim di call ini
+  "alert_id": "",                 // isi id document Firestore kalau alert_triggered true, string kosong kalau ga ada
+  "rms": 0.041,
+  "zcr": 0.054,
+  "peak": 1.0
+}
+
+PENTING: field di atas SEMUA selalu ada & selalu ada isinya (ga ada yang
+`null`/hilang) -- kalau ada field yang keliatan `null`/`undefined` di app,
+kemungkinan besar itu typo nama field di sisi mobile, bukan backend yang
+ga ngirim. Field boolean/angka defaultnya `false`/`0` kalau ga relevan
+(bukan `null`), dan `alert_id` defaultnya string kosong `""` (bukan `null`)
+kalau belum ada alert.
+
+Cara baca field ini di app:
+- "status" -> langsung tampilin sebagai badge di panel "Data Terakhir"
+- "anomaly" -> true kalau BUKAN "normal" (mencakup bantingan/teriakan/darurat_sos)
+- "sos" -> true KHUSUS kalau label darurat_sos -- kalau app cuma mau cek
+  "apa ini SOS beneran", cek field ini langsung, jangan bandingin string label
+- "escalating": true -> ini momen HP bergetar pola khusus + mulai
+  grace period pembatalan (baca dokumen PDF bagian 3.1-3.2)
+- "alert_triggered": true -> alert WA udah kekirim ke kontak darurat,
+  app boleh nampilin entry baru di "Histori Alert" (atau tinggal
+  refresh dari GET /devices/{id}/alerts)
+
+Kategori "label" -- SEKARANG DARI MODEL SCIKIT-LEARN BENERAN (RandomForest,
+ditraining di ml/train_feature_model.py atas dataset rms/zcr/peak berlabel,
+BUKAN threshold hardcode lagi kayak sebelumnya):
+- "normal"      -> obrolan/ambient biasa, RMS & Peak rendah
+- "bantingan"   -> benda dibanting/pecah -- transient, Peak mendadak
+                   tinggi tapi RMS sustain rendah-sedang
+- "teriakan"    -> teriakan/bentakan -- RMS & ZCR tinggi sepanjang buffer
+- "darurat_sos" -> kombinasi PALING ekstrem di RMS+ZCR+Peak sekaligus,
+                   diasumsikan pola paling parah (misal teriakan +
+                   benturan berulang / perjuangan fisik)
+
+Kapan "escalating" jadi true (nge-trigger alert WA):
+- "darurat_sos" -> LANGSUNG true di deteksi pertama, ga perlu nunggu
+  pola berulang -- ini sinyal darurat paling eksplisit.
+- "bantingan"/"teriakan" -> perlu >= 2 anomali dalam window 30 detik
+  (window_tracking.ESCALATION_THRESHOLD) dulu baru true -- biar ga
+  gampang false alarm dari 1 kejadian sesaat.
+- "normal" -> ga pernah escalating, ga pernah masuk window tracking.
+
+--------------------------------------------------------------------
+3. DATA TERAKHIR (buat panel "Data Terakhir" kalau app baru dibuka /
+   di-refresh, ga perlu nunggu /predict-features berikutnya)
+--------------------------------------------------------------------
+GET /devices/{device_id}/latest
+
+Response 200:
+{
+  "last_rms": 0.041,
+  "last_zcr": 0.054,
+  "last_peak": 1.0,
+  "last_label": "bantingan",
+  "last_processed_at": "2026-07-16T12:34:56.789+00:00"
+}
+
+Response 404 kalau device belum pernah kirim /predict-features sama
+sekali.
+
+--------------------------------------------------------------------
+4. HISTORI ALERT (buat panel "Histori Alert (N)")
+--------------------------------------------------------------------
+GET /devices/{device_id}/alerts?limit=20
+
+Response 200: (array, kosong [] kalau belum ada alert sama sekali)
+[
+  {
+    "id": "Abc123...",             // dipakai buat confirm-safe (lihat #6)
+    "user_id": "b3f1c9e2-....",
+    "prediction": "kdrt",
+    "confidence": 1.0,
+    "timestamp": "2026-07-16T12:34:56.789+00:00",
+    "rms": 0.041, "zcr": 0.054, "peak": 1.0,
+    "latitude": -0.502106, "longitude": 117.155594,
+    "alert_sent": true,
+    "type": "alert",
+    "status": "confirmed_safe"      // muncul cuma kalau udah di-confirm-safe
+  },
+  ...
+]
+
+CATATAN INFRA: query ini pakai composite index Firestore (where
+user_id + order_by timestamp). Kalau backend baru pertama kali jalanin
+query ini, Firestore bisa balas error 1x berisi LINK buat auto-create
+index -- tinggal klik link itu di error log server, tunggu index
+selesai dibuat (~1-2 menit), abis itu jalan normal seterusnya.
+
+--------------------------------------------------------------------
+5. KONTAK DARURAT
+--------------------------------------------------------------------
+POST /devices/{device_id}/contact
+Request body:
+{ "contact_number": "+628123456789" }   // format Twilio WhatsApp: +628xxxxxxxxxx
+
+Response 200: { "status": "ok" }
+
+GET /devices/{device_id}/contact
+Response 200: { "contact_number": "+628123456789" }   // atau null kalau belum diset
+
+--------------------------------------------------------------------
+5b. TEST ALERT (kirim WA test ke kontak darurat device -- buat
+    verifikasi integrasi Twilio jalan tanpa perlu trigger eskalasi
+    beneran lewat 2x /predict-features)
+--------------------------------------------------------------------
+POST /devices/{device_id}/test-alert
+Request body (opsional, ada default kalau dikosongin):
+{ "message": "Test alert dari Suara Rumah -- kalau kamu terima ini, integrasi WhatsApp jalan." }
+
+Response 200: { "sent": true, "target": "+628123456789" }
+
+Response 400 kalau device belum punya kontak darurat -- set dulu lewat
+POST /devices/{device_id}/contact (endpoint #5 di atas).
+
+PENTING: nomor tujuan SELALU diambil dari kontak darurat yang di-set
+device ini (bukan nomor tetap TWILIO_TARGET di .env) -- jadi tiap
+device/user bisa nambahin nomor WA orang terdekat masing-masing dari
+app, dan alert (baik test maupun beneran dari /predict-features) bakal
+otomatis ngirim ke nomor itu, bukan nomor fix.
+
+--------------------------------------------------------------------
+6. FOLLOW-UP "KONDISI AMAN" (dipanggil pas user tap tombol "Aman"
+   setelah alert terlanjur terkirim -- lihat dokumen PDF bagian 3.4)
+--------------------------------------------------------------------
+POST /alerts/{alert_id}/confirm-safe
+Request body: (kosong)
+
+Response 200: { "status": "ok" }
+
+Efek: backend cari device pemilik alert_id itu dari Firestore, kirim
+pesan WA follow-up ke kontak darurat device itu ("Update: pengguna
+menandai kondisi ini sebagai AMAN") + update status alert di Firestore
+jadi "confirmed_safe" (bakal kelihatan di GET .../alerts berikutnya).
+
+--------------------------------------------------------------------
+ENDPOINT LAMA (masih ada, dipakai buat testing backend independen dari
+mobile, bukan bagian dari arsitektur resmi produk yang audio-mentah-
+ga-pernah-ninggalin-device)
+--------------------------------------------------------------------
+POST /predict       -- upload file .wav/.mp3, server ekstrak fitur
+                        librosa sendiri (MFCC dkk), model RandomForest
+POST /predict-text   -- kirim {"text": "..."} , diklasifikasi
+                        TF-IDF+LogisticRegression (fitur di luar scope
+                        MVP resmi produk, tapi tetap jalan kalau mau
+                        dipakai buat channel lain, mis. chat/laporan
+                        teks)
+
+--------------------------------------------------------------------
+GAP YANG MASIH ADA / KEPUTUSAN YANG DIAMBIL (baca sebelum protes 😅)
+--------------------------------------------------------------------
+- Dokumen produk bilang window tracking "in-memory, bukan Redis"
+  buat skala MVP. Backend project ini KEBETULAN udah kepasang Redis
+  duluan (buat caching /predict), jadi window tracking dibikin dual-
+  mode: pakai Redis kalau nyala, otomatis fallback ke dict in-memory
+  polos kalau Redis mati -- behaviour sama persis kayak yang diminta
+  spec, cuma optionally lebih tahan lama (survive restart, siap
+  multi-instance) kalau Redis nyala.
+- Alert WA/SMS pakai Twilio (WhatsApp Sandbox), sesuai dokumen produk.
+  TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_WHATSAPP_FROM/
+  TWILIO_TARGET di .env; kalau device punya kontak darurat sendiri
+  (lihat endpoint #5), itu yang dipakai duluan, TWILIO_TARGET di .env
+  cuma fallback. Mode sandbox: penerima harus join sandbox dulu (kirim
+  kode join ke nomor whatsapp:+14155238886 dari WA masing-masing)
+  sebelum bisa nerima pesan -- baca README bagian 8.
+- Model fitur (RMS/ZCR/Peak -> label) ditraining dari GABUNGAN 2 sumber:
+  1. Sintetis (ml/generate_feature_dataset.py, 12.000 baris/3.000 per
+     kelas) -- rangenya perkiraan berdasar karakteristik akustik yang
+     masuk akal, sengaja overlap antar kelas tetangga biar confidence
+     ga mentok di 1.0 kayak versi paling awal.
+  2. Audio ASLI (ml/extract_real_features.py, ekstrak window ~3 detik
+     dari 13 file di ml/dataset/kdrt & ml/dataset/normal) -- 87 sample,
+     di-oversample 20x pas training biar ga tenggelam di antara data
+     sintetis. Window dari folder `normal/` dilabel "normal" langsung
+     (jelas), window dari folder `kdrt/` di-assign ke label kekerasan
+     TERDEKAT (nearest-centroid ke rata-rata sintetis) karena audio
+     real cuma dilabel "kdrt" secara keseluruhan, ga ada sub-label
+     bantingan/teriakan/darurat_sos per detik -- ini HEURISTIK, bukan
+     ground-truth manual. Kebetulan ga ada window real yang ke-assign
+     ke "darurat_sos" (audio yang ada belum cukup ekstrem), jadi kelas
+     itu masih murni sintetis.
+  Akurasi ~89% di evaluasi gabungan -- masih BUKAN jaminan akurat ke
+  device fisik asli, karena RMS/ZCR/Peak dihitung server-side dari file
+  audio penuh (librosa), belum tentu identik skalanya sama yang
+  dihitung di Kotlin dari rolling buffer mic asli. Begitu ada data
+  kalibrasi asli dari HP (bukan dari file audio), replace/tambahin ke
+  ml/dataset_features/real_audio_features.csv terus
+  `python ml/train_feature_model.py` ulang.
+- ⚠️ API KEY AUTH SUDAH DILEPAS (per permintaan waktu frontend kena
+  401 pas development). Endpoint /devices/{id}/... dan
+  /predict-features sekarang TERBUKA -- siapa aja yang tau/nebak
+  device_id bisa baca/tulis data device itu (kontak darurat, histori
+  alert, dll). Ini oke buat demo hackathon, TAPI sebelum dipakai
+  beneran (ada data pengguna asli), pertimbangkan pasang lagi
+  proteksi -- kodenya masih ada semua di device_service.py
+  (register_device/verify_api_key), tinggal balikin dependency
+  `Depends(verify_device)` yang sempat dilepas dari tiap endpoint di
+  app/main.py.
+- Fallback SMS native (SmsManager API) dan retry offline 3x itu
+  sepenuhnya di sisi Mobile (Kotlin) -- backend ga punya bagian di
+  situ, cuma nerima kalau request akhirnya berhasil sampai.

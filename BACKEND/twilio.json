@@ -1,0 +1,177 @@
+{
+  "_info": {
+    "title": "Suara Rumah API - Contoh Request/Response (integrasi WhatsApp via Twilio)",
+    "base_url_dev": "http://127.0.0.1:8000",
+    "catatan": "Semua contoh response di file ini HASIL TES BENERAN ke backend + Twilio WhatsApp Sandbox (bukan dikarang) -- termasuk alert_triggered:true beneran kekirim WA ke nomor real. Tidak ada field yang null -- kalau nemu field kosong di app, defaultnya false/0/\"\" (string kosong), bukan null.",
+    "auth": "Tidak ada header auth wajib saat ini. Identitas cukup lewat field 'device_id' (body atau path)."
+  },
+
+  "1_set_kontak_darurat": {
+    "method": "POST",
+    "url": "/devices/{device_id}/contact",
+    "url_example": "/devices/device-123/contact",
+    "deskripsi": "Dipanggil pas user di app pilih/ganti nomor kontak darurat sendiri (nomor keluarga/teman terdekat). Nomor INI yang bakal dikirimin WA setiap kali ada alert (bantingan/teriakan yang eskalasi, atau darurat_sos) buat device ini -- 100% custom per device, TIDAK ada nomor tetap/fallback dari backend selama field ini udah diisi.",
+    "request_example": { "contact_number": "+6282284462254" },
+    "request_format": "String, disarankan format internasional pakai tanda + (+62xxxxxxxxxx). Backend nerima string apa aja tanpa validasi format saat ini -- validasi format nomor (mis. wajib mulai +62, minimal panjang digit) sebaiknya dilakuin di sisi FE dulu sebelum di-POST.",
+    "response_example": { "status": "ok" },
+    "PENTING_twilio_sandbox": "Ganti nomor di sini SELALU berhasil disimpan (response tetep 'status: ok'), TAPI WA cuma akan beneran terkirim kalau nomor itu udah 'join' Twilio WhatsApp Sandbox duluan -- ini batasan dari Twilio, bukan dari endpoint ini. Caranya: dari WhatsApp nomor yang mau dijadiin kontak darurat, kirim pesan 'join <kode-dari-twilio-console>' ke +14155238886 (kode unik per akun Twilio, lihat di Twilio Console -> Messaging -> Try it out -> Send a WhatsApp message). Kalau belum join, endpoint tetep balikin 200 OK (nomornya kesimpen), tapi pas alert coba dikirim ke situ nanti 'alert_triggered' bakal false / gagal diam-diam. FE sebaiknya kasih instruksi 'join dulu' ke user pas mereka set nomor baru, atau sediain tombol 'Kirim Test Alert' (endpoint #3 di bawah) abis set kontak biar user langsung tau nomornya udah bisa nerima apa belum."
+  },
+
+  "2_get_kontak_darurat": {
+    "method": "GET",
+    "url": "/devices/{device_id}/contact",
+    "response_example": { "contact_number": "+6282284462254" }
+  },
+
+  "3_kirim_test_alert_manual": {
+    "method": "POST",
+    "url": "/devices/{device_id}/test-alert",
+    "deskripsi": "Kirim WA test ke kontak darurat device ini secara manual, ga perlu nunggu anomali beneran kedeteksi. Berguna buat ngetes tombol 'Kirim Test Alert' di app.",
+    "request_example": { "message": "Test dari Suara Rumah -- kalau kamu terima ini, integrasi WhatsApp jalan." },
+    "response_example": { "sent": true, "target": "+6282284462254" },
+    "response_kalau_belum_ada_kontak": {
+      "http_status": 400,
+      "body": { "detail": "Device ini belum punya kontak darurat. Set dulu lewat POST /devices/{device_id}/contact." }
+    }
+  },
+
+  "4_predict_features_NORMAL": {
+    "method": "POST",
+    "url": "/predict-features",
+    "deskripsi": "Ngobrol/ambient biasa -- ga ada anomali, ga ada alert.",
+    "request_example": { "device_id": "device-123", "rms": 0.05, "zcr": 0.04, "peak": 0.3 },
+    "response_example": {
+      "label": "normal",
+      "status": "NORMAL",
+      "confidence": 0.9895718412492153,
+      "probabilities": { "normal": 0.9895718412492153, "bantingan": 0.0104281587, "teriakan": 0.0, "darurat_sos": 0.0 },
+      "anomaly": false,
+      "sos": false,
+      "anomaly_count_in_window": 0,
+      "escalating": false,
+      "alert_triggered": false,
+      "alert_id": "",
+      "rms": 0.05,
+      "zcr": 0.04,
+      "peak": 0.3
+    }
+  },
+
+  "5_predict_features_BANTINGAN_belum_alert": {
+    "method": "POST",
+    "url": "/predict-features",
+    "deskripsi": "Anomali kedeteksi (bantingan/benda pecah), TAPI belum trigger alert -- bantingan & teriakan butuh minimal 2x deteksi anomali dalam 30 detik dulu (window tracking) sebelum WA beneran kekirim, biar ga gampang false alarm dari 1 kejadian sesaat.",
+    "request_example": { "device_id": "device-123", "rms": 0.041, "zcr": 0.054, "peak": 1.0 },
+    "response_example": {
+      "label": "bantingan",
+      "status": "BANTINGAN",
+      "confidence": 0.9508604615967886,
+      "probabilities": { "bantingan": 0.9508604616, "normal": 0.0302922007, "teriakan": 0.0188473377, "darurat_sos": 0.0 },
+      "anomaly": true,
+      "sos": false,
+      "anomaly_count_in_window": 1,
+      "escalating": false,
+      "alert_triggered": false,
+      "alert_id": "",
+      "rms": 0.041,
+      "zcr": 0.054,
+      "peak": 1.0
+    }
+  },
+
+  "6_predict_features_TERIAKAN_trigger_alert_beneran": {
+    "method": "POST",
+    "url": "/predict-features",
+    "deskripsi": "Ini panggilan KE-2 (dalam <30 detik dari panggilan pertama yang juga anomali) -- window tracking ngitung 2 anomali beruntun, escalating jadi true, WA BENERAN KEKIRIM ke kontak darurat device ini (alert_triggered: true, alert_id keisi id dokumen Firestore).",
+    "request_example": { "device_id": "device-123", "rms": 0.4, "zcr": 0.3, "peak": 0.75 },
+    "response_example": {
+      "label": "teriakan",
+      "status": "TERIAKAN",
+      "confidence": 0.8060958278064075,
+      "probabilities": { "teriakan": 0.8060958278, "darurat_sos": 0.1863035755, "bantingan": 0.0076005967, "normal": 0.0 },
+      "anomaly": true,
+      "sos": false,
+      "anomaly_count_in_window": 2,
+      "escalating": true,
+      "alert_triggered": true,
+      "alert_id": "OSC2pjXFAcq3BdcyZye8",
+      "rms": 0.4,
+      "zcr": 0.3,
+      "peak": 0.75
+    }
+  },
+
+  "7_predict_features_DARURAT_SOS_trigger_alert_langsung": {
+    "method": "POST",
+    "url": "/predict-features",
+    "deskripsi": "Darurat SOS BEDA dari bantingan/teriakan -- langsung trigger alert di deteksi PERTAMA (anomaly_count_in_window tetep 0 karena ga lewat window tracking sama sekali), karena ini sinyal darurat paling eksplisit. WA beneran kekirim di panggilan ini juga.",
+    "request_example": {
+      "device_id": "device-123",
+      "rms": 0.65,
+      "zcr": 0.4,
+      "peak": 0.95,
+      "latitude": -0.502106,
+      "longitude": 117.155594
+    },
+    "response_example": {
+      "label": "darurat_sos",
+      "status": "DARURAT_SOS",
+      "confidence": 0.9714376547069553,
+      "probabilities": { "darurat_sos": 0.9714376547, "teriakan": 0.0285623453, "bantingan": 0.0, "normal": 0.0 },
+      "anomaly": true,
+      "sos": true,
+      "anomaly_count_in_window": 0,
+      "escalating": true,
+      "alert_triggered": true,
+      "alert_id": "pCs5sUNwH0Q6eQ8uBLhb",
+      "rms": 0.65,
+      "zcr": 0.4,
+      "peak": 0.95
+    },
+    "catatan": "latitude/longitude opsional -- kalau dikirim, otomatis ditempel di pesan WA sebagai link Google Maps."
+  },
+
+  "8_confirm_safe_alarm_palsu": {
+    "method": "POST",
+    "url": "/alerts/{alert_id}/confirm-safe",
+    "deskripsi": "Dipanggil pas user tap tombol 'Aman' setelah alert terlanjur terkirim. alert_id didapat dari response predict-features di atas (field alert_id). Backend otomatis cari device pemilik alert itu buat kirim follow-up WA + update status di Firestore.",
+    "request_example": {},
+    "response_example": { "status": "ok" }
+  },
+
+  "9_get_data_terakhir": {
+    "method": "GET",
+    "url": "/devices/{device_id}/latest",
+    "deskripsi": "Buat panel 'Data Terakhir' di dashboard kalau app baru dibuka, ga perlu nunggu predict-features berikutnya.",
+    "response_example": {
+      "last_rms": 0.65,
+      "last_zcr": 0.4,
+      "last_peak": 0.95,
+      "last_label": "darurat_sos",
+      "last_processed_at": "2026-07-16T16:48:15.380512+00:00",
+      "contact_number": "+6282284462254"
+    },
+    "response_kalau_belum_pernah_kirim_data": { "http_status": 404, "body": { "detail": "Belum ada data buat device ini." } }
+  },
+
+  "10_get_histori_alert": {
+    "method": "GET",
+    "url": "/devices/{device_id}/alerts?limit=20",
+    "deskripsi": "Buat panel 'Histori Alert (N)'.",
+    "response_example": [
+      {
+        "id": "pCs5sUNwH0Q6eQ8uBLhb",
+        "user_id": "device-123",
+        "prediction": "darurat_sos",
+        "confidence": 0.9714376547069553,
+        "timestamp": "2026-07-16T16:48:15.380512+00:00",
+        "rms": 0.65, "zcr": 0.4, "peak": 0.95,
+        "latitude": -0.502106, "longitude": 117.155594,
+        "alert_sent": true,
+        "type": "alert",
+        "status": "confirmed_safe"
+      }
+    ],
+    "PENTING_belum_beres": "Endpoint ini masih balikin 500 Internal Server Error di project ini karena Firestore minta composite index dulu (query where user_id + order_by timestamp). Errornya sendiri berisi LINK buat auto-create index-nya -- tinggal buka link itu sekali (muncul di log server pas endpoint ini dipanggil), tunggu ~1-2 menit sampai index selesai dibuat di Firebase Console, abis itu endpoint ini jalan normal dan balikin array kayak contoh di atas."
+  }
+}
