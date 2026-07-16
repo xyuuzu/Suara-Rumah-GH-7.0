@@ -1,0 +1,170 @@
+====================================================================
+SUARA RUMAH - REASONING PEMILIHAN TECH STACK BACKEND
+====================================================================
+
+Dokumen ini jelasin KENAPA tiap komponen tech stack backend dipilih --
+buat referensi tim (pitch deck, FAQ juri, atau onboarding member baru).
+
+--------------------------------------------------------------------
+1. REDIS -- caching & window tracking (bukan buat nyimpen audio)
+--------------------------------------------------------------------
+Redis dipilih karena dia in-memory key-value store -- baca/tulis-nya
+jauh lebih cepat dibanding database disk biasa, cocok buat 2 kebutuhan
+yang sifatnya SEMENTARA (bukan histori permanen):
+
+- Cache hasil prediksi (hash SHA-256 dari konten audio/teks) -- request
+  yang identik ga perlu diproses ulang lewat librosa/model (mahal
+  secara komputasi).
+- Window tracking -- ngitung berapa kali anomali kedeteksi dalam 30
+  detik terakhir per device, buat nentuin kapan pola dianggap
+  "eskalatif" dan alert WA di-trigger.
+
+Kenapa cocok sama prinsip privasi produk: Redis DI SINI SAMA SEKALI
+GA NYIMPEN AUDIO. Audio yang diupload ke /predict diproses langsung di
+memory buat diekstrak fiturnya (MFCC/RMS/ZCR/dst), abis itu buang --
+yang disimpen di Redis cuma HASIL (angka fitur + label), dan itu pun
+sifatnya cache sementara (ada TTL, otomatis ke-expire). Laporan/hasil
+final yang perlu disimpen permanen baru masuk ke Firestore (lihat
+poin 5) -- bukan tugas Redis.
+
+Kenapa ga cukup in-memory Python biasa (dict): sebenernya buat skala
+1 server/1 instance, dict polos juga cukup (dan project ini emang
+punya fallback ke situ kalau Redis mati -- lihat app/services/
+window_tracking.py). Tapi Redis dipilih karena data-nya survive kalau
+server restart/deploy ulang, dan siap discale ke banyak instance
+server sekaligus (kalau backend-nya nanti di-deploy multi-instance di
+belakang load balancer) -- dict Python di 1 proses ga bisa dibagi ke
+proses/server lain, Redis bisa.
+
+--------------------------------------------------------------------
+2. FASTAPI (PYTHON) -- backend API server
+--------------------------------------------------------------------
+FastAPI dipilih sebagai framework API karena beberapa alasan konkret:
+
+- Auto-generate dokumentasi API (Swagger UI di /docs) langsung dari
+  kode -- ga perlu nulis dokumentasi API manual terpisah, dan tim lain
+  (mobile/FE) bisa langsung coba tiap endpoint dari browser tanpa
+  install tools tambahan.
+- Validasi request otomatis lewat Pydantic (tipe data body/JSON
+  divalidasi otomatis sebelum masuk ke logic endpoint) -- ngurangin
+  boilerplate validasi manual dan nangkep error dari input yang salah
+  bentuk lebih awal.
+- Async-native & ringan -- performanya cukup buat beban endpoint
+  yang dipanggil berulang kali dari mobile (/predict-features tiap
+  ~5 detik per device).
+- Python dipilih sebagai bahasa backend karena SELURUH ekosistem ML
+  yang dipakai (scikit-learn, librosa, pandas, numpy) native Python --
+  backend & pipeline ML jadi 1 bahasa, 1 proses, ga perlu bridge/RPC
+  ke service terpisah buat manggil model ML dari bahasa lain (mis. kalau
+  backend-nya Node/Go, prediksi ML harus lewat HTTP call ke service
+  Python terpisah -- nambah kompleksitas & latency yang ga perlu buat
+  skala MVP ini).
+- Struktur simpel: semua endpoint API didaftarkan di 1 file
+  (app/main.py), logic detail per fitur dipisah ke app/services/*.py
+  -- gampang di-trace, cocok buat ukuran project & tim yang masih
+  kecil (belum butuh microservices/multi-router yang lebih kompleks).
+
+Catatan jujur: ini pertama kalinya tim pakai FastAPI, jadi bantuan AI
+(Claude) dipakai buat percepat setup awal & pembelajaran pola-pola
+FastAPI (dependency injection, Pydantic models, dst) di awal proyek --
+bukan sesuatu yang disembunyiin, karena justru itu salah satu alasan
+kenapa milih tool yang punya dokumentasi jelas & komunitas besar kayak
+FastAPI (gampang dicari referensinya).
+
+--------------------------------------------------------------------
+3. LIBROSA -- audio processing (suara jadi angka)
+--------------------------------------------------------------------
+librosa dipilih karena dia library STANDAR DE FACTO di Python buat
+audio/music information retrieval -- dipakai luas di riset & industri,
+dokumentasinya lengkap, dan langsung nyediain fungsi-fungsi ekstraksi
+fitur akustik yang dibutuhkan tanpa harus implementasi sinyal digital
+dari nol:
+
+- MFCC, chroma, mel-spectrogram, zero-crossing rate, RMS energy, pitch
+  -- dipakai di model suara penuh (/predict, ml/train_model.py).
+- RMS, ZCR, Peak amplitude -- versi ringan yang jadi basis
+  /predict-features, dihitung juga dari audio real (ml/dataset/kdrt &
+  normal) lewat ml/extract_real_features.py buat nambah sinyal nyata
+  ke training data.
+
+Ini komponen yang secara harfiah ngejalanin prinsip inti algoritma
+produk: "suara diubah jadi angka numerik" -- audio mentah (gelombang)
+masuk, keluar jadi array angka yang bisa diproses model ML. Setelah
+fitur numerik ini diekstrak, audio mentahnya ga disimpen di mana pun
+(baik di server maupun database) -- cuma angka hasil ekstraksi yang
+lanjut ke tahap klasifikasi.
+
+--------------------------------------------------------------------
+4. SCIKIT-LEARN -- klasifikasi AI
+--------------------------------------------------------------------
+scikit-learn dipilih sebagai library ML utama buat SEMUA model
+klasifikasi di project ini (bukan cuma 1): RandomForestClassifier buat
+model suara (MFCC) dan model fitur ringan (RMS/ZCR/Peak), Logistic
+Regression buat model teks (TF-IDF). Alasan detailnya:
+
+a) Kenapa scikit-learn dibanding deep learning (TensorFlow/PyTorch):
+   Data yang tersedia KECIL (13 file audio real, dataset fitur cuma 3
+   angka input) -- deep learning butuh data jauh lebih banyak buat ga
+   overfitting, butuh lebih banyak compute (idealnya GPU), dan model-
+   nya jauh lebih berat buat di-deploy (ukuran file, dependency berat).
+   Buat skala MVP 25 jam dengan data segini, deep learning itu over-
+   engineered -- ga ada keuntungan akurasi yang berarti, malah nambah
+   risiko & waktu development. scikit-learn ngasih model yang cukup
+   akurat, cepat ditraining (hitungan detik), dan inference-nya ringan
+   (CPU biasa cukup, penting karena /predict-features dipanggil
+   berulang kali secara real-time dari mobile).
+
+b) Kenapa RandomForest spesifik (buat model suara & model fitur):
+   - Bisa belajar batas keputusan non-linear tanpa perlu tuning
+     hyperparameter serumit SVM (pilih kernel, dst) atau neural net.
+   - Robust ke data yang kecil/noisy -- relevan banget karena dataset
+     audio real di project ini masih sangat terbatas (13 file).
+   - class_weight="balanced" bawaan -- gampang nanganin kelas yang
+     jumlah datanya ga seimbang (mis. kelas "darurat_sos" yang natural-
+     nya lebih jarang terjadi/direkam dibanding "normal").
+   - predict_proba() ngasih confidence score per kelas yang dipakai
+     langsung buat field "confidence" di response API dan buat logic
+     threshold (ALERT_CONFIDENCE_THRESHOLD) -- bukan cuma prediksi
+     kelas doang, tapi juga seberapa yakin model-nya.
+   - Parameter max_depth & min_samples_leaf gampang di-tuning buat
+     ngontrol overfitting -- ini KEBUKTIAN kepake langsung di project
+     ini: versi awal model fitur (RMS/ZCR/Peak) confidence-nya selalu
+     mentok 1.0 (overfit, dataset sintetisnya kurang overlap), begitu
+     max_depth=10 & min_samples_leaf=15 diset + dataset diperlebar,
+     confidence jadi realistis (0.8-0.97 tergantung kasus) -- bukti
+     model-nya belajar pola, bukan cuma ngafal.
+
+c) Konsistensi 1 ekosistem: scikit-learn dipakai seragam di semua
+   pipeline ML (audio, teks, fitur ringan) -- 1 API yang sama
+   (fit/predict/predict_proba), 1 cara serialisasi model (joblib
+   .pkl), 1 mental model buat seluruh tim yang megang bagian ML.
+   Ngurangin kompleksitas operasional dibanding kalau tiap model pakai
+   library/pendekatan berbeda-beda.
+
+--------------------------------------------------------------------
+5. FIREBASE FIRESTORE -- database utama
+--------------------------------------------------------------------
+Firestore (bagian dari Firebase) dipilih sebagai database utama
+karena:
+
+- Managed/serverless -- ga perlu provisioning & maintenance server
+  database sendiri, penting buat kecepatan development dalam waktu
+  terbatas (25 jam hackathon).
+- NoSQL document-based -- cocok buat struktur data project ini yang
+  fleksibel (dokumen deteksi/alert punya field yang beda-beda
+  tergantung sumbernya: audio, teks, atau fitur mobile).
+- SDK resmi Python (firebase-admin) yang matang & gampang diintegrasi
+  ke FastAPI.
+- Free tier cukup generous buat skala MVP/demo.
+
+PALING PENTING -- alasan privasi: Firestore di project ini CUMA
+NYIMPEN LAPORAN/HASIL YANG SUDAH DIPROSES (label prediksi, confidence,
+timestamp, angka fitur RMS/ZCR/Peak, status alert, kontak darurat) --
+TIDAK PERNAH nyimpen file audio mentah. Ini sejalan langsung sama
+prinsip privasi yang jadi salah satu nilai jual utama produk: suara
+korban KDRT itu data yang sangat sensitif, jadi arsitekturnya sengaja
+didesain supaya audio mentah ga pernah keluar dari device (dan kalau
+pun lewat server buat testing lewat endpoint /predict, langsung
+diproses & dibuang, ga disimpen). Yang tersimpan permanen di database
+cuma jejak angka & hasil klasifikasi -- bukan rekaman suara korban
+itu sendiri.
