@@ -1,11 +1,11 @@
 # Suara Rumah - Safety MVP
 
-A monitoring and security system (Android-based with a Python backend) designed to detect domestic emergency situations through passive audio analysis and physical hardware triggers.
+A monitoring and security system (Android-based with a Python backend) designed to detect domestic emergency situations through passive audio analysis, featuring stealthy hardware-based false alarm cancellation.
 
 ## Features
 
 - **Passive Audio Monitoring**: Captures audio in the background and extracts sound data directly on the device to detect threats.
-- **Hardware SOS Trigger**: Allows users to secretly trigger SOS signals by pressing the physical volume buttons, which is crucial when looking at a screen is impossible.
+- **Hardware Grace Period Cancellation**: The physical volume buttons (`VolumeButtonInterceptor.kt`) are exclusively used to silently cancel the grace period in the event of a false audio detection, without the user needing to turn on or look at the screen.
 - **Smart Grace Period**: Provides a specific time delay managed by `GracePeriodManager` allowing users to cancel false alarms before any message is sent.
 - **Offline Resilience**: Features a `FailedRequestDao` that securely logs instructions when the connection is lost and automatically resends them when the network is available.
 - **Visual Analytics**: Provides data visualization of audio frequencies in graphs and a complete log of alerts via the dashboard.
@@ -48,8 +48,8 @@ Based on our strict privacy principles, the audio processing pipeline is highly 
 
 1. **Setup Contacts**: Open the app and navigate to `SetupContactScreen` to add emergency contacts to the local Room Database.
 2. **Background Monitoring**: The `AudioCaptureService` will run silently in the background.
-3. **Hardware Trigger**: In an emergency, press the physical volume buttons to bypass the screen and trigger an alert.
-4. **Cancel Alert**: If triggered by mistake, open the app within the 60-second grace period and tap the "Safe" button.
+3. **Hardware Cancellation**: If the system falsely detects an anomaly, press the physical volume buttons within the grace period to secretly cancel the alert without opening the phone.
+4. **In-App Cancellation**: Alternatively, open the app within the grace period and tap the "Safe" button.
 
 ## Privacy & Security
 
@@ -60,7 +60,7 @@ Based on our strict privacy principles, the audio processing pipeline is highly 
 ## System Requirements
 
 - **Microphone Access**: Required for background audio capture.
-- **Physical Hardware**: Android device with physical volume buttons for the hardware SOS trigger.
+- **Physical Hardware**: Android device with physical volume buttons for the hardware cancellation trigger.
 - **Network**: Internet connection is required for backend AI analysis and Twilio SMS/WhatsApp routing.
 
 ---
