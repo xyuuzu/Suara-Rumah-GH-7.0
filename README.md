@@ -47,6 +47,22 @@ Based on our strict privacy principles, the audio processing pipeline is highly 
    - Start the FastAPI server using Uvicorn or your preferred ASGI server.
    - Build and run the Android application on a physical device (required for microphone and volume button interception testing).
 
+## ⚠️ Extra Setup Checklist (Re-check Every Session)
+
+These are easy to miss on a fresh clone or a new network, and they fail silently rather than throwing an error — worth re-checking before every demo/test run, not just once.
+
+**Backend**
+- [ ] `.env` is filled in (copy from `BACKEND/.env.example`). Missing Twilio/Firebase/Redis credentials don't crash the server — the related feature is just silently skipped with a log warning. See [`BACKEND/README.md`](BACKEND/README.md#setup-untuk-developer) for the full guide.
+- [ ] `firebase-credentials.json` is manually placed in `BACKEND/` — it's git-ignored and not part of the repo, so every fresh clone needs it re-added before Firestore works.
+- [ ] ngrok is running (`ngrok http 8000`) and its URL is synced in **two** places: `PUBLIC_BASE_URL` in `.env` **and** the webhook field in Twilio Console. Free-tier ngrok URLs change on every restart, so this needs re-checking each session.
+- [ ] Emergency contact numbers have actually "joined" the Twilio WhatsApp Sandbox — otherwise opt-in/alert requests report success from the API but the WhatsApp message never arrives.
+
+**Frontend**
+- [ ] `API_BASE_URL` in [`Constants.kt`](FRONTEND/app/src/main/java/com/example/suararumah/util/Constants.kt) is hardcoded to one developer's LAN IP + port. Update it to the current backend host's IP (check with `ipconfig`/`ifconfig`) whenever you switch networks or machines — a physical Android device can't reach the backend via `localhost`.
+- [ ] `IS_DEMO_MODE` in the same file swaps the grace period between 10s (demo) and 60s (production) — confirm it matches what you're actually testing.
+- [ ] The app is built and run on a **physical device**, not an emulator — background mic capture and physical volume-button interception don't behave reliably on emulators.
+- [ ] `API_KEY` / `API_KEY_HEADER` in `Constants.kt` are placeholder values (`"test"`), left over from backend auth that is currently disabled (see [Honest Limitations](#honest-limitations-known-not-hidden)). Don't mistake this for real authentication.
+
 ## Usage
 
 1. **Setup Contacts**: Open the app and navigate to `SetupContactScreen` to add emergency contacts to the local Room Database.
