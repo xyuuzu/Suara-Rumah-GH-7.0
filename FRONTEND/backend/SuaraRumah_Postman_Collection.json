@@ -1,0 +1,193 @@
+{
+  "info": {
+    "name": "Suara Rumah API - Dummy Testing Kit",
+    "description": "Import ini ke Postman, jalanin request dari atas ke bawah urut. TIDAK butuh header auth apa pun -- device diidentifikasi cukup lewat variable 'device_id' (default 'test-device').\n\nGanti variable 'base_url' kalau backend-nya ga di localhost.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string" },
+    { "key": "device_id", "value": "test-device", "type": "string" },
+    { "key": "alert_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "0. Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{base_url}}/", "host": ["{{base_url}}"], "path": [""] }
+      }
+    },
+    {
+      "name": "1. Setup Device (opsional)",
+      "item": [
+        {
+          "name": "Register Device (opsional, ga wajib dipanggil)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{base_url}}/devices/register", "host": ["{{base_url}}"], "path": ["devices", "register"] },
+            "description": "Endpoint ini masih ada tapi opsional -- ga ada endpoint lain yang cek api_key hasilnya lagi. Boleh dilewatin, langsung pakai device_id bebas (default variable 'test-device')."
+          }
+        },
+        {
+          "name": "Set Emergency Contact (dummy nomor)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"contact_number\": \"+628123456789\"\n}" },
+            "url": { "raw": "{{base_url}}/devices/{{device_id}}/contact", "host": ["{{base_url}}"], "path": ["devices", "{{device_id}}", "contact"] }
+          }
+        },
+        {
+          "name": "Get Emergency Contact",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/devices/{{device_id}}/contact", "host": ["{{base_url}}"], "path": ["devices", "{{device_id}}", "contact"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Kirim Fitur Suara (RMS/ZCR/Peak)",
+      "item": [
+        {
+          "name": "Predict Features - contoh NORMAL",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_id\": \"{{device_id}}\",\n  \"rms\": 0.02,\n  \"zcr\": 0.03,\n  \"peak\": 0.1\n}"
+            },
+            "url": { "raw": "{{base_url}}/predict-features", "host": ["{{base_url}}"], "path": ["predict-features"] }
+          }
+        },
+        {
+          "name": "Predict Features - contoh CRASH (match screenshot)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_id\": \"{{device_id}}\",\n  \"rms\": 0.041,\n  \"zcr\": 0.054,\n  \"peak\": 1.0,\n  \"latitude\": -0.502106,\n  \"longitude\": 117.155594\n}"
+            },
+            "url": { "raw": "{{base_url}}/predict-features", "host": ["{{base_url}}"], "path": ["predict-features"] }
+          }
+        },
+        {
+          "name": "Predict Features - contoh KDRT #1 (belum eskalasi)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_id\": \"{{device_id}}\",\n  \"rms\": 0.3,\n  \"zcr\": 0.2,\n  \"peak\": 0.95\n}"
+            },
+            "url": { "raw": "{{base_url}}/predict-features", "host": ["{{base_url}}"], "path": ["predict-features"] }
+          }
+        },
+        {
+          "name": "Predict Features - contoh KDRT #2 (TRIGGER eskalasi+alert)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.alert_id) { pm.collectionVariables.set('alert_id', data.alert_id); console.log('alert_id ke-simpan:', data.alert_id); }",
+                  "pm.test('escalating harus true (2 anomali dalam 30 detik)', () => pm.expect(data.escalating).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_id\": \"{{device_id}}\",\n  \"rms\": 0.35,\n  \"zcr\": 0.25,\n  \"peak\": 0.9\n}"
+            },
+            "url": { "raw": "{{base_url}}/predict-features", "host": ["{{base_url}}"], "path": ["predict-features"] },
+            "description": "PENTING: jalanin request ini SEGERA setelah 'KDRT #1' (dalam 30 detik) biar window tracking ngitung 2 anomali beruntun -> escalating jadi true -> alert WA ke-trigger (atau muncul warning 'credential belum diisi' di server log kalau Twilio belum di-setup)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Baca Data (buat dashboard app)",
+      "item": [
+        {
+          "name": "Get Latest Reading",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/devices/{{device_id}}/latest", "host": ["{{base_url}}"], "path": ["devices", "{{device_id}}", "latest"] }
+          }
+        },
+        {
+          "name": "Get Alert History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/devices/{{device_id}}/alerts?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["devices", "{{device_id}}", "alerts"],
+              "query": [{ "key": "limit", "value": "20" }]
+            },
+            "description": "Kalau ini balikin 500 + 'query requires an index', klik link di error message Firestore-nya sekali aja (butuh index composite user_id+timestamp), tunggu 1-2 menit, lalu ulangi."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Follow-up Alert",
+      "item": [
+        {
+          "name": "Confirm Safe (tandai alarm palsu)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "raw", "raw": "" },
+            "url": { "raw": "{{base_url}}/alerts/{{alert_id}}/confirm-safe", "host": ["{{base_url}}"], "path": ["alerts", "{{alert_id}}", "confirm-safe"] },
+            "description": "alert_id otomatis kesimpan dari response 'KDRT #2' di atas (kalau alert beneran ke-trigger)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Endpoint Lama (upload audio/teks langsung, di luar arsitektur resmi mobile)",
+      "item": [
+        {
+          "name": "Predict dari Teks (dummy)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"aku bunuh kamu kalau macam-macam\",\n  \"user_id\": \"test-user\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/predict-text", "host": ["{{base_url}}"], "path": ["predict-text"] }
+          }
+        },
+        {
+          "name": "Predict dari Audio Upload (pilih file dari folder 'Data sound kdrt' manual)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "file", "type": "file", "src": [] }]
+            },
+            "url": { "raw": "{{base_url}}/predict", "host": ["{{base_url}}"], "path": ["predict"] },
+            "description": "Di tab Body, klik field 'file', pilih salah satu .MP3 dari 'Data sound kdrt/high confident/' atau 'Data sound kdrt/low confident/' di project."
+          }
+        }
+      ]
+    }
+  ]
+}
