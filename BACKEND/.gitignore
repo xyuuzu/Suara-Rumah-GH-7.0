@@ -5,5 +5,9 @@ __pycache__/
 
 .env
 firebase-credentials.json
+*firebase-adminsdk*.json
 
 ml/trained_model/
+
+# log pemakaian klip demo audio per alert (runtime-generated, bukan source file)
+saved_audio/

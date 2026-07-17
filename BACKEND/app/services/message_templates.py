@@ -32,12 +32,22 @@ def _pick_dummy_name(device_id: str) -> str:
     return DUMMY_NAMES[idx]
 
 
-def build_emergency_message(device_id: str, latitude: float | None = None, longitude: float | None = None) -> str:
+def build_emergency_message(
+    device_id: str,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    has_audio: bool = False,
+) -> str:
     """
     Bikin pesan darurat lengkap: konteks, lokasi, langkah disarankan, hotline,
     waktu kejadian. Nadanya sengaja dibuat halus/ga langsung mengejutkan --
     dibuka dengan sapaan & konteks dulu sebelum masuk ke detail deteksi,
     biar penerima ga kaget/panik duluan sebelum ngerti apa yang terjadi.
+
+    `has_audio` -- WhatsApp GA NAMPILIN caption buat pesan tipe audio/voice
+    note (beda dari gambar/video/dokumen yang punya area caption) -- jadi
+    keterangan "ini bukti Penyiksaan" HARUS ditaruh di pesan teks ini,
+    bukan dicoba nempel ke pesan audio (udah kebukti ga muncul pas dites).
     """
     nama = _pick_dummy_name(device_id)
     now = datetime.now(WIB)
@@ -49,20 +59,19 @@ def build_emergency_message(device_id: str, latitude: float | None = None, longi
         else "📍 Lokasi: tidak tersedia"
     )
 
+    audio_line = "\n\n🎧 Berikut adalah bukti Penyiksaan (klip audio terlampir di bawah pesan ini)." if has_audio else ""
+
     return (
-        "Halo 👋 Ini pesan otomatis dari Suara Rumah.\n\n"
-        f"{nama} sempat menandai kamu sebagai kontak darurat mereka. Barusan sistem mendeteksi "
-        f"pola suara yang agak mencurigakan di sekitar {nama} -- mungkin ga apa-apa, tapi kami mau "
-        "pastiin dulu semuanya baik-baik aja.\n\n"
-        f"{lokasi_line}\n\n"
-        "Kalau berkenan, ini yang bisa kamu lakukan:\n"
-        f"1. Hubungi atau kunjungi {nama} sekarang — pilih salah satu\n"
-        "2. Jika tidak ada respons, coba cara satunya (hubungi kalau tadi kunjungi, atau sebaliknya)\n"
-        "3. Jika situasi terlihat berbahaya, hubungi:\n"
-        "   • Polisi: 110\n"
-        "   • Hotline KemenPPPA: 129\n\n"
-        f"Waktu kejadian: {waktu}\n\n"
-        f"Bantuanmu berarti banget buat {nama}. Terima kasih 🙏"
+        f"Halo 👋 Ini Suara Rumah. {nama} menjadikan kamu kontak darurat, dan sistem barusan "
+        f"mendeteksi suara mencurigakan di lokasi {nama}.\n\n"
+        f"{lokasi_line}"
+        f"{audio_line}\n\n"
+        "Segera:\n"
+        f"1. Hubungi/kunjungi {nama} langsung\n"
+        "2. Jangan sebar ke medsos/grup dulu sebelum ada bukti\n"
+        "3. Kalau bahaya: kumpulkan bukti (foto/rekaman/saksi), lapor 110 / SAPA 129 (WA 08111129129)\n"
+        "4. Butuh bantuan hukum: LBH APIK / Komnas Perempuan\n\n"
+        f"{waktu}"
     )
 
 

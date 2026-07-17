@@ -101,7 +101,7 @@
   "6_predict_features_TERIAKAN_trigger_alert_beneran": {
     "method": "POST",
     "url": "/predict-features",
-    "deskripsi": "Ini panggilan KE-2 (dalam <30 detik dari panggilan pertama yang juga anomali) -- window tracking ngitung 2 anomali beruntun, escalating jadi true, WA BENERAN KEKIRIM ke kontak darurat device ini (alert_triggered: true, alert_id keisi id dokumen Firestore).",
+    "deskripsi": "Ini panggilan KE-2 (dalam <30 detik dari panggilan pertama yang juga anomali) -- window tracking ngitung 2 anomali beruntun, escalating jadi true, WA BENERAN KEKIRIM ke kontak darurat device ini (alert_triggered: true, alert_id keisi id dokumen Firestore). Pesan WA-nya juga otomatis dilampirin 1 klip audio DEMO (diambil acak dari ml/dataset/kdrt/, BUKAN audio live dari device -- endpoint ini emang ga pernah nerima audio mentah sama sekali, cuma RMS/ZCR/Peak). Lihat catatan 'lampiran_audio_demo' di bagian bawah file ini.",
     "request_example": { "device_id": "device-123", "rms": 0.4, "zcr": 0.3, "peak": 0.75 },
     "response_example": {
       "label": "teriakan",
@@ -192,5 +192,12 @@
       }
     ],
     "PENTING_belum_beres": "Endpoint ini masih balikin 500 Internal Server Error di project ini karena Firestore minta composite index dulu (query where user_id + order_by timestamp). Errornya sendiri berisi LINK buat auto-create index-nya -- tinggal buka link itu sekali (muncul di log server pas endpoint ini dipanggil), tunggu ~1-2 menit sampai index selesai dibuat di Firebase Console, abis itu endpoint ini jalan normal dan balikin array kayak contoh di atas."
+  },
+
+  "lampiran_audio_demo": {
+    "deskripsi": "Tiap kali alert WA BENERAN kekirim (escalating:true, alert_triggered:true) -- baik dari /predict maupun /predict-features -- pesannya otomatis dilampirin 1 klip audio, dipilih ACAK dari file yang UDAH ADA di ml/dataset/kdrt/ (7 file, hasil real dari 'Data sound kdrt/high confident/').",
+    "PENTING_ini_bukan_audio_asli_kejadian": "Klip yang dilampirin BUKAN rekaman dari kejadian yang lagi dideteksi. /predict-features cuma nerima RMS/ZCR/Peak (3 angka) dari mobile, ga pernah nerima audio mentah sama sekali -- jadi ga ada 'audio asli' yang bisa dilampirin dari situ. Ini murni klip DEMO buat bikin notifikasi WA lebih konkret pas presentasi/demo, bukan bukti forensik kejadian sungguhan.",
+    "cara_kerja": "app/services/demo_audio.py pilih 1 file secara acak dari ml/dataset/kdrt/, dicatat ke saved_audio/audio_saved.json (log ringan: filename + device_id + prediction + confidence + waktu), lalu di-attach ke pesan Twilio lewat parameter media_url (URL publik ke GET /demo-audio/<filename>).",
+    "syarat_biar_lampiran_beneran_nyampe": "Sama kayak webhook konfirmasi kontak -- Twilio yang FETCH file dari URL publik, jadi PUBLIC_BASE_URL di .env harus nunjuk ke URL yang bisa diakses dari internet (ngrok pas dev, URL deploy pas production). Kalau PUBLIC_BASE_URL masih localhost, pesan tetap terkirim (alert_triggered:true) tapi Twilio ga bisa ambil lampirannya."
   }
 }

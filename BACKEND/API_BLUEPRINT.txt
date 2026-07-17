@@ -258,6 +258,11 @@ GAP YANG MASIH ADA / KEPUTUSAN YANG DIAMBIL (baca sebelum protes 😅)
   cuma fallback. Mode sandbox: penerima harus join sandbox dulu (kirim
   kode join ke nomor whatsapp:+14155238886 dari WA masing-masing)
   sebelum bisa nerima pesan -- baca README bagian 8.
+- Tiap alert WA beneran kekirim otomatis dilampirin 1 klip audio DEMO
+  (dipilih acak dari ml/dataset/kdrt/, lihat app/services/demo_audio.py)
+  -- BUKAN audio asli kejadian (/predict-features ga pernah nerima audio
+  mentah sama sekali). Detail lengkap ada di twilio.json bagian
+  'lampiran_audio_demo'.
 - Model fitur (RMS/ZCR/Peak -> label) ditraining dari GABUNGAN 2 sumber:
   1. Sintetis (ml/generate_feature_dataset.py, 12.000 baris/3.000 per
      kelas) -- rangenya perkiraan berdasar karakteristik akustik yang

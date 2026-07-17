@@ -1,4 +1,5 @@
 import os
+from urllib.parse import quote
 from xml.sax.saxutils import escape
 
 import joblib
@@ -6,12 +7,14 @@ import numpy as np
 from fastapi import FastAPI, Request, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.services.feature_extraction import extract_features_from_bytes
 from app.services.text_detection import preprocess_text
 from app.services import redis_service, device_service, window_tracking
 from app.services.twilio_service import send_whatsapp_alert
+from app.services.demo_audio import pick_demo_audio, log_demo_audio_used
 from app.services.message_templates import (
     build_emergency_message,
     build_follow_up_safe_message,
@@ -27,6 +30,13 @@ app = FastAPI(title="KDRT Voice & Text Detector API")
 ALERT_CONFIDENCE_THRESHOLD = 0.7
 SOS_LABEL = "darurat_sos"
 
+# URL publik backend ini -- dipakai buat bangun link audio bukti kekerasan
+# yang di-attach ke pesan WA (Twilio fetch media dari URL publik, ga bisa
+# localhost). Pas dev lokal, isi ini pakai URL ngrok kalau mau tes lampiran
+# audio beneran nyampe; kalau kosong/localhost, pesan tetap terkirim tapi
+# lampirannya ga bisa diambil Twilio dari luar.
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+
 # biar bisa diakses dari app mobile/frontend
 app.add_middleware(
     CORSMiddleware,
@@ -38,6 +48,14 @@ app.add_middleware(
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "ml", "trained_model", "model.pkl")
 TEXT_MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "ml", "trained_model", "text_model.pkl")
 FEATURE_MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "ml", "trained_model", "feature_model.pkl")
+
+DEMO_AUDIO_DIR = os.path.join(os.path.dirname(__file__), "..", "ml", "dataset", "kdrt")
+# nge-serve klip demo di ml/dataset/kdrt/ lewat GET /demo-audio/<filename> --
+# dipakai Twilio buat fetch lampiran audio pas kirim pesan WA (media_url
+# butuh URL yang bisa di-GET langsung, bukan path lokal). Ini BUKAN audio
+# live dari user -- klip demo yang udah ada di dataset, lihat
+# app/services/demo_audio.py buat detail & alasannya.
+app.mount("/demo-audio", StaticFiles(directory=DEMO_AUDIO_DIR), name="demo-audio")
 
 model_bundle = None
 text_model_bundle = None
@@ -120,14 +138,31 @@ def root():
     return {"status": "ok", "message": "KDRT Voice & Text Detector API jalan"}
 
 
-def maybe_send_kdrt_alert(result: dict, source: str) -> None:
+def maybe_send_kdrt_alert(result: dict, source: str, media_url: str | None = None) -> None:
     """Kirim alert WA lewat Twilio kalau prediksi kdrt dengan confidence tinggi."""
     if result["prediction"] == "kdrt" and result["confidence"] >= ALERT_CONFIDENCE_THRESHOLD:
         percent = round(result["confidence"] * 100, 1)
+        # WhatsApp ga nampilin caption buat pesan audio -- keterangan bukti
+        # ditaruh di pesan teks ini, bukan di-attach ke pesan audio-nya.
+        audio_line = " 🎧 Berikut adalah bukti Penyiksaan (klip audio terlampir di bawah)." if media_url else ""
         send_whatsapp_alert(
             f"⚠️ Terdeteksi indikasi KDRT dari {source} (confidence: {percent}%). "
-            f"Segera cek kondisi korban."
+            f"Segera cek kondisi korban.{audio_line}",
+            media_url=media_url,
         )
+
+
+def build_demo_audio_media_url(user_id: str, prediction: str, confidence: float) -> str | None:
+    """
+    Pilih 1 klip demo dari ml/dataset/kdrt/, catat pemakaiannya ke
+    saved_audio/audio_saved.json, terus balikin URL publiknya (buat
+    di-attach ke pesan WA). Return None kalau folder demo kosong.
+    """
+    filename = pick_demo_audio()
+    if filename is None:
+        return None
+    log_demo_audio_used(filename, user_id=user_id, prediction=prediction, confidence=confidence)
+    return f"{PUBLIC_BASE_URL}/demo-audio/{quote(filename)}"
 
 
 @app.post("/predict")
@@ -165,7 +200,16 @@ async def predict(file: UploadFile = File(...)):
         "probabilities": prob_dict,
     }
     redis_service.set_cached_result(audio_bytes, namespace="audio", result=result)
-    maybe_send_kdrt_alert(result, source="suara")
+
+    is_confirmed_kdrt = result["prediction"] == "kdrt" and result["confidence"] >= ALERT_CONFIDENCE_THRESHOLD
+    media_url = None
+    if is_confirmed_kdrt:
+        media_url = build_demo_audio_media_url(
+            user_id="anonymous", prediction=result["prediction"], confidence=result["confidence"]
+        )
+
+    maybe_send_kdrt_alert(result, source="suara", media_url=media_url)
+
     if result["prediction"] == "kdrt":
         save_detection_result(user_id="anonymous", prediction=result["prediction"], confidence=result["confidence"])
 
@@ -333,10 +377,13 @@ def predict_features(payload: FeatureInput):
             escalating = anomaly_count >= window_tracking.ESCALATION_THRESHOLD
 
         if escalating:
-            message = build_emergency_message(device_id, payload.latitude, payload.longitude)
+            media_url = build_demo_audio_media_url(user_id=device_id, prediction=label, confidence=confidence)
+            message = build_emergency_message(
+                device_id, payload.latitude, payload.longitude, has_audio=media_url is not None
+            )
 
             target = device_service.get_emergency_contact(device_id)
-            alert_triggered = send_whatsapp_alert(message, target=target)
+            alert_triggered = send_whatsapp_alert(message, target=target, media_url=media_url)
 
             saved = save_detection_result(
                 user_id=device_id,
