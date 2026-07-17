@@ -10,28 +10,47 @@
     "method": "POST",
     "url": "/devices/{device_id}/contact",
     "url_example": "/devices/device-123/contact",
-    "deskripsi": "Dipanggil pas user di app pilih/ganti nomor kontak darurat sendiri (nomor keluarga/teman terdekat). Nomor INI yang bakal dikirimin WA setiap kali ada alert (bantingan/teriakan yang eskalasi, atau darurat_sos) buat device ini -- 100% custom per device, TIDAK ada nomor tetap/fallback dari backend selama field ini udah diisi.",
+    "deskripsi": "Dipanggil pas user di app pilih/ganti nomor kontak darurat sendiri (nomor keluarga/teman terdekat). PENTING -- ALUR BARU: nomor yang BARU di-set/DIUBAH otomatis dikirimin pesan opt-in ('bersedia jadi kontak darurat? balas IYA/TIDAK'). Nomor itu BELUM bisa nerima alert asli sampai mereka bales IYA lewat WA (lihat endpoint '1b' di bawah buat cara nangkep balasannya). Ini biar orang ga tiba-tiba dapet pesan darurat yang mengejutkan tanpa pernah setuju jadi kontak darurat duluan.",
     "request_example": { "contact_number": "+6282284462254" },
     "request_format": "String, disarankan format internasional pakai tanda + (+62xxxxxxxxxx). Backend nerima string apa aja tanpa validasi format saat ini -- validasi format nomor (mis. wajib mulai +62, minimal panjang digit) sebaiknya dilakuin di sisi FE dulu sebelum di-POST.",
-    "response_example": { "status": "ok" },
-    "PENTING_twilio_sandbox": "Ganti nomor di sini SELALU berhasil disimpan (response tetep 'status: ok'), TAPI WA cuma akan beneran terkirim kalau nomor itu udah 'join' Twilio WhatsApp Sandbox duluan -- ini batasan dari Twilio, bukan dari endpoint ini. Caranya: dari WhatsApp nomor yang mau dijadiin kontak darurat, kirim pesan 'join <kode-dari-twilio-console>' ke +14155238886 (kode unik per akun Twilio, lihat di Twilio Console -> Messaging -> Try it out -> Send a WhatsApp message). Kalau belum join, endpoint tetep balikin 200 OK (nomornya kesimpen), tapi pas alert coba dikirim ke situ nanti 'alert_triggered' bakal false / gagal diam-diam. FE sebaiknya kasih instruksi 'join dulu' ke user pas mereka set nomor baru, atau sediain tombol 'Kirim Test Alert' (endpoint #3 di bawah) abis set kontak biar user langsung tau nomornya udah bisa nerima apa belum."
+    "response_example": { "status": "ok", "confirmation_sent": true },
+    "catatan_confirmation_sent": "true kalau ini nomor BARU/BERUBAH (pesan opt-in barusan dikirim). false kalau nomor yang di-POST persis sama kayak yang udah tersimpan sebelumnya (ga di-spam ulang minta konfirmasi lagi).",
+    "PENTING_twilio_sandbox": "Pesan opt-in di atas SELALU 'berhasil dikirim' dari sisi API (confirmation_sent:true), TAPI cuma beneran nyampe kalau nomor itu udah 'join' Twilio WhatsApp Sandbox duluan -- ini batasan dari Twilio, bukan dari endpoint ini. Caranya: dari WhatsApp nomor yang mau dijadiin kontak darurat, kirim pesan 'join <kode-dari-twilio-console>' ke +14155238886 (kode unik per akun Twilio, lihat di Twilio Console -> Messaging -> Try it out -> Send a WhatsApp message)."
+  },
+
+  "1b_twilio_webhook_konfirmasi_kontak": {
+    "method": "POST",
+    "url": "/twilio/webhook",
+    "dipanggil_oleh": "TWILIO (bukan mobile/FE) -- ini bukan endpoint yang di-hit dari app, tapi URL yang didaftarin ke Twilio Console biar Twilio manggil balik ke backend kita tiap kali ada balasan WA masuk.",
+    "deskripsi": "Nangkep balasan IYA/TIDAK dari nomor yang lagi dikonfirmasi jadi kontak darurat (hasil endpoint #1 di atas). Kalau body balasannya 'iya'/'ya'/'yes' -> device yang lagi nunggu konfirmasi dari nomor itu di-set contact_confirmed=true (alert mulai bisa dikirim ke nomor itu). Kalau 'tidak'/'ga'/'no' -> contact_number dihapus dari device itu (harus pilih kontak lain). Balasan lain -> dibales minta klarifikasi 'balas IYA atau TIDAK'.",
+    "setup_wajib": "URL endpoint ini HARUS bisa diakses dari internet (Twilio ga bisa manggil localhost). Pas development: jalanin ngrok (`ngrok http 8000`), copy URL https-nya (mis. https://abcd1234.ngrok.io/twilio/webhook), paste di Twilio Console -> Messaging -> Try it out -> WhatsApp Sandbox Settings -> kolom 'WHEN A MESSAGE COMES IN'. Pas udah deploy (Railway/Render dst), ganti ke URL production.",
+    "request_dari_twilio_contoh": { "From": "whatsapp:+6282284462254", "Body": "IYA" },
+    "response": "Balikin TwiML XML (bukan JSON) -- Twilio yang otomatis kirim balesan konfirmasi/penolakan ke pengirim berdasarkan isi <Message> di XML ini, kita ga perlu manggil Twilio API terpisah buat itu.",
+    "sudah_dites": "Sudah dites lokal (simulasi form POST langsung ke endpoint ini, bukan lewat Twilio beneran karena butuh ngrok) -- alur IYA & TIDAK dua-duanya berhasil: status kontak berubah bener di Firestore (dicek lewat GET /devices/{device_id}/contact sebelum & sesudah)."
   },
 
   "2_get_kontak_darurat": {
     "method": "GET",
     "url": "/devices/{device_id}/contact",
-    "response_example": { "contact_number": "+6282284462254" }
+    "deskripsi": "Field 'confirmed' penting buat UI -- kalau false, app sebaiknya kasih tau user 'nomor ini masih nunggu konfirmasi dari penerima' instead of nganggep udah aktif.",
+    "response_example": { "contact_number": "+6282284462254", "confirmed": true },
+    "response_example_belum_konfirmasi": { "contact_number": "+6282284462254", "confirmed": false },
+    "response_example_belum_ada_kontak": { "contact_number": null, "confirmed": false }
   },
 
   "3_kirim_test_alert_manual": {
     "method": "POST",
     "url": "/devices/{device_id}/test-alert",
-    "deskripsi": "Kirim WA test ke kontak darurat device ini secara manual, ga perlu nunggu anomali beneran kedeteksi. Berguna buat ngetes tombol 'Kirim Test Alert' di app.",
+    "deskripsi": "Kirim WA test ke kontak darurat device ini secara manual, ga perlu nunggu anomali beneran kedeteksi. Berguna buat ngetes tombol 'Kirim Test Alert' di app. SEKARANG JUGA IKUT DI-GATE sama status konfirmasi -- endpoint ini cuma jalan kalau kontaknya udah confirmed:true.",
     "request_example": { "message": "Test dari Suara Rumah -- kalau kamu terima ini, integrasi WhatsApp jalan." },
     "response_example": { "sent": true, "target": "+6282284462254" },
     "response_kalau_belum_ada_kontak": {
       "http_status": 400,
       "body": { "detail": "Device ini belum punya kontak darurat. Set dulu lewat POST /devices/{device_id}/contact." }
+    },
+    "response_kalau_kontak_belum_konfirmasi": {
+      "http_status": 400,
+      "body": { "detail": "Kontak darurat belum konfirmasi opt-in (belum balas IYA lewat WA). Alert belum bisa dikirim." }
     }
   },
 

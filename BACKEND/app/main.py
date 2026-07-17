@@ -1,14 +1,25 @@
 import os
+from xml.sax.saxutils import escape
+
 import joblib
 import numpy as np
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, Request, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.services.feature_extraction import extract_features_from_bytes
 from app.services.text_detection import preprocess_text
 from app.services import redis_service, device_service, window_tracking
 from app.services.twilio_service import send_whatsapp_alert
+from app.services.message_templates import (
+    build_emergency_message,
+    build_follow_up_safe_message,
+    build_contact_confirmation_request,
+    build_contact_confirmed_reply,
+    build_contact_declined_reply,
+    build_contact_unclear_reply,
+)
 from app.services.firebase_service import save_detection_result, get_alerts_for_device, mark_alert_safe, get_alert_by_id
 
 app = FastAPI(title="KDRT Voice & Text Detector API")
@@ -219,13 +230,28 @@ def register_device():
 
 @app.post("/devices/{device_id}/contact")
 def set_contact(device_id: str, payload: ContactInput):
-    device_service.set_emergency_contact(device_id, payload.contact_number)
-    return {"status": "ok"}
+    """
+    Simpan nomor kontak darurat. Nomor BARU/BERUBEDA otomatis dikirimin
+    pesan opt-in ("bersedia jadi kontak darurat? balas IYA/TIDAK") -- nomor
+    itu BELUM bisa nerima alert asli sampai mereka balas IYA lewat WA (lihat
+    POST /twilio/webhook). Nomor yang sama persis kayak sebelumnya ga
+    di-spam ulang minta konfirmasi.
+    """
+    is_new_number = device_service.set_emergency_contact(device_id, payload.contact_number)
+    confirmation_sent = False
+    if is_new_number:
+        confirmation_sent = send_whatsapp_alert(
+            build_contact_confirmation_request(device_id), target=payload.contact_number
+        )
+    return {"status": "ok", "confirmation_sent": confirmation_sent}
 
 
 @app.get("/devices/{device_id}/contact")
 def get_contact(device_id: str):
-    return {"contact_number": device_service.get_emergency_contact(device_id)}
+    return {
+        "contact_number": device_service.get_emergency_contact(device_id, require_confirmed=False),
+        "confirmed": device_service.is_contact_confirmed(device_id),
+    }
 
 
 @app.post("/devices/{device_id}/test-alert")
@@ -239,6 +265,12 @@ def test_alert(device_id: str, payload: TestAlertInput):
     """
     target = device_service.get_emergency_contact(device_id)
     if not target:
+        raw_number = device_service.get_emergency_contact(device_id, require_confirmed=False)
+        if raw_number:
+            raise HTTPException(
+                status_code=400,
+                detail="Kontak darurat belum konfirmasi opt-in (belum balas IYA lewat WA). Alert belum bisa dikirim.",
+            )
         raise HTTPException(
             status_code=400,
             detail="Device ini belum punya kontak darurat. Set dulu lewat POST /devices/{device_id}/contact.",
@@ -301,12 +333,7 @@ def predict_features(payload: FeatureInput):
             escalating = anomaly_count >= window_tracking.ESCALATION_THRESHOLD
 
         if escalating:
-            message = (
-                f"⚠️ Suara Rumah mendeteksi \"{label}\" (confidence: {round(confidence * 100, 1)}%). "
-                f"Segera cek kondisi korban."
-            )
-            if payload.latitude is not None and payload.longitude is not None:
-                message += f" Lokasi: https://maps.google.com/?q={payload.latitude},{payload.longitude}"
+            message = build_emergency_message(device_id, payload.latitude, payload.longitude)
 
             target = device_service.get_emergency_contact(device_id)
             alert_triggered = send_whatsapp_alert(message, target=target)
@@ -349,7 +376,45 @@ def predict_features(payload: FeatureInput):
 def confirm_safe(alert_id: str):
     """Dipanggil pas user buka app & tap 'Aman' setelah alert terlanjur terkirim (follow-up message)."""
     alert = get_alert_by_id(alert_id)
-    target = device_service.get_emergency_contact(alert["user_id"]) if alert else None
-    send_whatsapp_alert("Update: pengguna menandai kondisi ini sebagai AMAN (alarm palsu).", target=target)
+    device_id = alert["user_id"] if alert else ""
+    target = device_service.get_emergency_contact(device_id) if alert else None
+    send_whatsapp_alert(build_follow_up_safe_message(device_id), target=target)
     mark_alert_safe(alert_id)
     return {"status": "ok"}
+
+
+@app.post("/twilio/webhook")
+async def twilio_webhook(request: Request):
+    """
+    Dipanggil TWILIO (bukan mobile/FE) tiap kali ada balasan WA masuk ke
+    nomor sandbox -- dipakai buat nangkep balasan IYA/TIDAK dari kontak
+    darurat yang lagi dikonfirmasi (lihat POST /devices/{device_id}/contact).
+
+    SETUP: daftarin URL publik endpoint ini (lewat ngrok pas dev, atau URL
+    hasil deploy) di Twilio Console -> Messaging -> Try it out -> WhatsApp
+    Sandbox Settings -> "WHEN A MESSAGE COMES IN". Twilio ga bisa manggil
+    localhost langsung.
+    """
+    form = await request.form()
+    from_number = str(form.get("From", "")).replace("whatsapp:", "").strip()
+    body = str(form.get("Body", "")).strip().lower()
+
+    device_ids = device_service.find_device_ids_by_contact_number(from_number)
+
+    reply = ""
+    if device_ids:
+        if body in ("iya", "ya", "yes", "y", "iyaa", "iya.", "setuju"):
+            for device_id in device_ids:
+                device_service.confirm_contact(device_id)
+            reply = build_contact_confirmed_reply(device_ids[0])
+        elif body in ("tidak", "ga", "gak", "no", "n", "engga", "enggak"):
+            for device_id in device_ids:
+                device_service.reject_contact(device_id)
+            reply = build_contact_declined_reply(device_ids[0])
+        else:
+            reply = build_contact_unclear_reply()
+    # kalau device_ids kosong -- ga ada device yang lagi nunggu konfirmasi dari nomor ini, diemin aja (ga balas)
+
+    body_xml = f"<Message>{escape(reply)}</Message>" if reply else ""
+    twiml = f'<?xml version="1.0" encoding="UTF-8"?><Response>{body_xml}</Response>'
+    return Response(content=twiml, media_type="application/xml")
