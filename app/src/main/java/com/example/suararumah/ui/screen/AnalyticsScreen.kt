@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -52,137 +53,89 @@ fun AnalyticsScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Text(
-                text = "Analisis & Histori Suara",
+                text = "Aktivitas & Situasi Rumah",
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
             )
 
-            // ── Grafik Fluktuasi Suara (AudioChart) ──
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Surface),
-                shape = RoundedCornerShape(20.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = "Grafik Aktivitas Suara Ruangan (60 Detik)",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Memantau kestabilan gelombang suara secara langsung di sekitar perangkat.",
-                        style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    AudioChart(
-                        dataPoints = rmsHistory,
-                        isAnomalyDetected = lastClassification?.hasAnomaly == true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(150.dp)
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(8.dp).background(if (lastClassification?.hasAnomaly == true) AlertDanger else Primary, RoundedCornerShape(4.dp)))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (lastClassification?.hasAnomaly == true) "⚠️ Terdeteksi fluktuasi suara ekstrem (Anomali)" else "🟢 Aktivitas suara normal & aman",
-                            style = MaterialTheme.typography.labelSmall.copy(color = if (lastClassification?.hasAnomaly == true) AlertDanger else Primary, fontWeight = FontWeight.Bold)
-                        )
-                    }
-                }
+            // ── Kartu Status Ketenangan Ruangan (Sederhana & Empatik untuk Orang Awam) ──
+            var showTechnicalDetails by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+            val isAnomaly = lastClassification?.hasAnomaly == true
+            val isModerateActivity = !isAnomaly && (latestFeatures?.rms ?: 0f) > 0.04f
+
+            val statusEmoji = when {
+                isAnomaly -> "⚠️"
+                isModerateActivity -> "😐"
+                else -> "😌"
+            }
+            val statusTitle = when {
+                isAnomaly -> "Perlu Perhatian Khusus"
+                isModerateActivity -> "Ada Aktivitas Suara"
+                else -> "Rumahmu Tenang Saat Ini"
+            }
+            val statusDesc = when {
+                isAnomaly -> "Terdeteksi suara keras atau teriakan yang memerlukan pengecekan."
+                isModerateActivity -> "Suara percakapan atau aktivitas normal terdeteksi di sekitar perangkat."
+                else -> "Situasi aman dan kondusif. Tidak ada suara ekstrem yang mengganggu."
+            }
+            val statusColor = when {
+                isAnomaly -> AlertDanger
+                isModerateActivity -> AlertWarning
+                else -> Primary
             }
 
-            // ── Data Fitur Terakhir (Ramah Orang Umum) ──
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Surface),
-                shape = RoundedCornerShape(20.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                shape = RoundedCornerShape(24.dp),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, statusColor.copy(alpha = 0.4f))
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(80.dp)
+                            .background(statusColor.copy(alpha = 0.15f), RoundedCornerShape(40.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = statusEmoji, style = MaterialTheme.typography.headlineLarge)
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Ringkasan Pembacaan Suara",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        text = statusTitle,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, color = statusColor)
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Indikator akustik yang dipahami oleh sistem AI lokal:",
-                        style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
+                        text = statusDesc,
+                        style = MaterialTheme.typography.bodyMedium.copy(color = TextSecondary),
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    HorizontalDivider(color = Color(0xFFE2E8F0))
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        StatBox(
-                            title = "Kekerasan",
-                            subtitle = "Loudness (RMS)",
-                            value = String.format("%.3f", latestFeatures?.rms ?: 0f),
-                            color = Primary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        StatBox(
-                            title = "Frekuensi",
-                            subtitle = "Pitch (ZCR)",
-                            value = String.format("%.3f", latestFeatures?.zcr ?: 0f),
-                            color = Color(0xFF3B82F6),
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        StatBox(
-                            title = "Lonjakan Max",
-                            subtitle = "Peak Sound",
-                            value = String.format("%.3f", latestFeatures?.peakAmplitude ?: 0f),
-                            color = AlertWarning,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Label Klasifikasi Ramah Umum
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                color = if (lastClassification?.hasAnomaly == true) AlertDanger.copy(alpha = 0.12f) else Primary.copy(alpha = 0.12f),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            .padding(14.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
-                            Text(
-                                text = "Status Ruangan:",
-                                style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary)
-                            )
-                            Text(
-                                text = if (lastClassification?.hasAnomaly == true) "ANOMALI TERDETEKSI" else "AMAN DAN KONDUSIF",
-                                style = MaterialTheme.typography.titleSmall.copy(
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (lastClassification?.hasAnomaly == true) AlertDanger else Primary
-                                )
-                            )
-                        }
-                        Badge(
-                            containerColor = if (lastClassification?.hasAnomaly == true) AlertDanger else Primary,
-                            contentColor = Color.White
-                        ) {
-                            Text(
-                                text = lastClassification?.label?.uppercase() ?: "NORMAL",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
+                        Text("Proteksi Aktif 24 Jam", style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary))
+                        Text(
+                            text = "🟢 Menjaga Ketenangan",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = Primary)
+                        )
                     }
                 }
             }
 
-            // ── Histori Alert Card & Laporan Alarm Palsu ──
+            // ── Catatan Kejadian (Histori) ──
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Surface),
@@ -191,14 +144,14 @@ fun AnalyticsScreen(
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
-                        text = "Histori Peringatan Darurat",
+                        text = "Catatan Kejadian",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
                     if (alertHistory.isEmpty()) {
                         Text(
-                            text = "✅ Belum ada insiden atau suara darurat yang tercatat.",
+                            text = "✅ Belum ada catatan kejadian. Situasi rumah tenang.",
                             style = MaterialTheme.typography.bodyMedium.copy(color = TextSecondary),
                             modifier = Modifier.padding(vertical = 12.dp)
                         )
@@ -210,6 +163,50 @@ fun AnalyticsScreen(
                                     onReportSafe = { dashboardViewModel.reportFalseAlarm(alert) }
                                 )
                             }
+                        }
+                    }
+                }
+            }
+
+            // ── Tombol Opsi Detail Teknis (Tersembunyi secara default untuk orang awam) ──
+            TextButton(
+                onClick = { showTechnicalDetails = !showTechnicalDetails },
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Text(
+                    text = if (showTechnicalDetails) "Tutup Detail Akustik ▲" else "Lihat Detail Akustik (Opsional) ▼",
+                    style = MaterialTheme.typography.labelMedium.copy(color = TextSecondary)
+                )
+            }
+
+            if (showTechnicalDetails) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Surface.copy(alpha = 0.7f)),
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Grafik Gelombang & Angka Sensor",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        AudioChart(
+                            dataPoints = rmsHistory,
+                            isAnomalyDetected = lastClassification?.hasAnomaly == true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(130.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("RMS: ${String.format("%.3f", latestFeatures?.rms ?: 0f)}", style = MaterialTheme.typography.labelSmall)
+                            Text("ZCR: ${String.format("%.3f", latestFeatures?.zcr ?: 0f)}", style = MaterialTheme.typography.labelSmall)
+                            Text("Peak: ${String.format("%.3f", latestFeatures?.peakAmplitude ?: 0f)}", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }

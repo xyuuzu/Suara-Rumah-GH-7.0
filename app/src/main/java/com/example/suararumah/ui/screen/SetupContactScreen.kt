@@ -97,7 +97,7 @@ fun SetupContactScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "Kontak Darurat",
+                        "Orang yang Kupercaya",
                         style = MaterialTheme.typography.headlineMedium
                     )
                 },
@@ -137,12 +137,12 @@ fun SetupContactScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "Tambah Kontak Darurat",
+                            text = "Tambah Orang yang Kupercaya",
                             style = MaterialTheme.typography.headlineMedium
                         )
 
                         Text(
-                            text = "Kontak ini akan menerima pesan darurat saat anomali terdeteksi.",
+                            text = "Orang ini akan menerima pesan bantuan otomatis jika kamu butuh pertolongan.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )

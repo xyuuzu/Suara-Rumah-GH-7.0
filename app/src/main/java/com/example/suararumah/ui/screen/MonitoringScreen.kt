@@ -25,6 +25,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Phone
@@ -142,7 +144,7 @@ fun MonitoringScreen(
                         )
                     )
                     Text(
-                        text = "Sistem Proteksi Akustik Lokal",
+                        text = "Perlindungan Rumah 24/7",
                         style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
                     )
                 }
@@ -293,16 +295,16 @@ fun BigCenterMonitoringButton(
         verticalArrangement = Arrangement.Center,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp)
+            .padding(vertical = 16.dp)
     ) {
         // ── Outer Glass Halo Ring (Lebih Besar & Elegan) ──
         Box(
-            modifier = Modifier.size(310.dp),
+            modifier = Modifier.size(350.dp),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .size(300.dp)
+                    .size(320.dp)
                     .scale(pulseScale)
                     .clip(CircleShape)
                     .background(buttonColor.copy(alpha = 0.08f))
@@ -312,7 +314,7 @@ fun BigCenterMonitoringButton(
             // Inner Glass Circle
             Box(
                 modifier = Modifier
-                    .size(276.dp)
+                    .size(300.dp)
                     .scale(pulseScale)
                     .clip(CircleShape)
                     .background(buttonColor.copy(alpha = 0.15f))
@@ -321,7 +323,7 @@ fun BigCenterMonitoringButton(
             // ── Main Tactile Circular Button ──
             Box(
                 modifier = Modifier
-                    .size(250.dp)
+                    .size(270.dp)
                     .scale(pulseScale)
                     .clip(CircleShape)
                     .background(buttonColor)
@@ -340,7 +342,7 @@ fun BigCenterMonitoringButton(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Icon(
-                            imageVector = if (isMonitoring) Icons.Default.Notifications else Icons.Default.Info,
+                            imageVector = if (isMonitoring) Icons.Default.Home else Icons.Default.Favorite,
                             contentDescription = null,
                             tint = Color.White,
                             modifier = Modifier.size(64.dp)
@@ -349,8 +351,8 @@ fun BigCenterMonitoringButton(
                         Text(
                             text = when {
                                 isAnomalyDetected -> "DARURAT"
-                                isMonitoring -> "MEMANTAU"
-                                else -> "NON-AKTIF"
+                                isMonitoring -> "RUMAH AMAN"
+                                else -> "ISTIRAHAT"
                             },
                             style = MaterialTheme.typography.headlineSmall.copy(
                                 fontWeight = FontWeight.ExtraBold,
@@ -360,7 +362,7 @@ fun BigCenterMonitoringButton(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (isMonitoring) "Ketuk untuk nonaktifkan" else "Ketuk untuk mengaktifkan",
+                            text = if (isMonitoring) "Ketuk untuk istirahat sejenak" else "Ketuk untuk mulai melindungi",
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 color = Color.White.copy(alpha = 0.9f)
                             )
@@ -414,7 +416,7 @@ fun EmergencyContactSummaryCard(
                 Spacer(modifier = Modifier.width(14.dp))
                 Column {
                     Text(
-                        text = "Kontak Darurat",
+                        text = "Orang yang Kupercaya",
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                     )
                     if (contactsCount > 0 && firstContactName != null) {
@@ -424,7 +426,7 @@ fun EmergencyContactSummaryCard(
                         )
                     } else {
                         Text(
-                            text = "⚠️ Belum diatur • Ketuk untuk mengatur",
+                            text = "⚠️ Belum diatur • Ketuk untuk mendaftarkan",
                             style = MaterialTheme.typography.bodySmall.copy(color = AlertWarning, fontWeight = FontWeight.Medium)
                         )
                     }
@@ -459,7 +461,7 @@ fun WelcomeOnboardingDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Proteksi akustik pintar kini aktif di perangkat Anda. Untuk keamanan maksimal, ikuti 2 langkah cepat berikut:",
+                    text = "Aplikasi Suara Rumah siap melindungimu dan keluarga. Agar kamu merasa lebih tenang, ikuti 2 langkah cepat ini:",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Card(
@@ -468,8 +470,8 @@ fun WelcomeOnboardingDialog(
                     border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(alpha = 0.3f))
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("1️⃣ Atur Kontak Darurat", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = Primary))
-                        Text("Daftarkan nomor keluarga/tetangga untuk menerima SMS & WA otomatis jika bahaya terdeteksi.", style = MaterialTheme.typography.bodySmall)
+                        Text("1️⃣ Atur Orang yang Kupercaya", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = Primary))
+                        Text("Daftarkan nomor keluarga/tetangga untuk menerima pesan bantuan otomatis jika kamu butuh pertolongan.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 Card(
@@ -478,8 +480,8 @@ fun WelcomeOnboardingDialog(
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("2️⃣ Aktifkan Proteksi Suara", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
-                        Text("Tekan tombol bulat besar di tengah beranda untuk mulai memantau suara ruangan 24/7.", style = MaterialTheme.typography.bodySmall)
+                        Text("2️⃣ Nyalakan Perlindungan Rumah", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+                        Text("Tekan tombol hijau 'RUMAH AMAN' di tengah layar agar aplikasi menjaga ketenangan rumahmu.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }

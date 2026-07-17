@@ -7,8 +7,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.fil`led.Notifications
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,9 +32,9 @@ import com.example.suararumah.viewmodel.DashboardViewModel
 
 /**
  * 4 Screen Utama aplikasi:
- * - Monitoring: Tab 1 (Beranda dengan Tombol Bulat Besar)
- * - Analytics: Tab 2 (Grafik & Histori Alert)
- * - Profile: Tab 3 (Login KTP & Info Sesi)
+ * - Monitoring: Tab 1 (Beranda / Rumah Aman)
+ * - Analytics: Tab 2 (Aktivitas & Situasi)
+ * - Profile: Tab 3 (Profil & Privasi)
  * - SetupContact: Layar Atur Kontak Darurat
  */
 enum class Screen {
@@ -79,8 +80,8 @@ class MainActivity : ComponentActivity() {
                                     NavigationBarItem(
                                         selected = currentScreen == Screen.Monitoring,
                                         onClick = { currentScreen = Screen.Monitoring },
-                                        icon = { Icon(Icons.Default.Notifications, contentDescription = null) },
-                                        label = { Text("Memantau", style = MaterialTheme.typography.labelSmall) },
+                                        icon = { Icon(Icons.Default.Home, contentDescription = null) },
+                                        label = { Text("Rumah Aman", style = MaterialTheme.typography.labelSmall) },
                                         colors = NavigationBarItemDefaults.colors(
                                             selectedIconColor = Color.Black,
                                             selectedTextColor = Primary,
@@ -93,7 +94,7 @@ class MainActivity : ComponentActivity() {
                                         selected = currentScreen == Screen.Analytics,
                                         onClick = { currentScreen = Screen.Analytics },
                                         icon = { Icon(Icons.Default.Info, contentDescription = null) },
-                                        label = { Text("Analisis", style = MaterialTheme.typography.labelSmall) },
+                                        label = { Text("Aktivitas", style = MaterialTheme.typography.labelSmall) },
                                         colors = NavigationBarItemDefaults.colors(
                                             selectedIconColor = Color.Black,
                                             selectedTextColor = Primary,

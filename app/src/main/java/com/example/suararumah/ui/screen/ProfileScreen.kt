@@ -52,6 +52,7 @@ fun ProfileScreen(
 ) {
     val userInfo by userPreferences.userInfoFlow.collectAsState()
     var showDemoPanel by remember { mutableStateOf(false) }
+    var demoTapCount by remember { mutableStateOf(0) }
 
     Column(
         modifier = modifier
@@ -67,7 +68,7 @@ fun ProfileScreen(
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
         )
 
-        // ── Kartu Identitas Pengguna (KTP Terverifikasi) ──
+        // ── Kartu Identitas Pengguna (Tanpa Tampilan NIK demi Privasi & Keamanan) ──
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Surface),
@@ -105,10 +106,10 @@ fun ProfileScreen(
                                 text = userInfo?.name ?: "Warga Sangatta Utara",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "NIK: " + (userInfo?.nik?.take(6) ?: "640812") + "••••••••" + (userInfo?.nik?.takeLast(2) ?: "01"),
-                                style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
+                                text = "Akun Lokal Terverifikasi",
+                                style = MaterialTheme.typography.bodySmall.copy(color = Primary, fontWeight = FontWeight.SemiBold)
                             )
                         }
                     }
@@ -127,8 +128,8 @@ fun ProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Status Identitas:", style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary))
-                    Text("✅ Terverifikasi KTP Lokal", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, color = Primary))
+                    Text("Status Proteksi:", style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary))
+                    Text("🛡️ Aktif Menjaga Rumah", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, color = Primary))
                 }
             }
         }
@@ -141,7 +142,7 @@ fun ProfileScreen(
             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // Atur Kontak Darurat
+                // Orang yang Kupercaya (Kontak Darurat)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -154,8 +155,8 @@ fun ProfileScreen(
                         Icon(imageVector = Icons.Default.Phone, contentDescription = null, tint = Primary)
                         Spacer(modifier = Modifier.width(14.dp))
                         Column {
-                            Text("Atur Kontak Darurat (SMS / WA)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-                            Text("Daftar penerima peringatan otomatis", style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary))
+                            Text("Orang yang Kupercaya", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                            Text("Daftar penerima pesan pertolongan otomatis", style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary))
                         }
                     }
                     Icon(imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = TextSecondary)
@@ -163,7 +164,7 @@ fun ProfileScreen(
 
                 HorizontalDivider(color = Color(0xFFE2E8F0))
 
-                // Pengaturan Notifikasi Suara
+                // Notifikasi & Getaran
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -175,8 +176,8 @@ fun ProfileScreen(
                         Icon(imageVector = Icons.Default.Notifications, contentDescription = null, tint = Primary)
                         Spacer(modifier = Modifier.width(14.dp))
                         Column {
-                            Text("Peringatan & Getaran SOS", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-                            Text("Aktif eksklusif saat deteksi anomali", style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary))
+                            Text("Notifikasi & Getaran", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
+                            Text("Aktif otomatis saat terdeteksi suara ekstrem", style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary))
                         }
                     }
                     Text("Aktif", style = MaterialTheme.typography.labelMedium.copy(color = Primary, fontWeight = FontWeight.Bold))
@@ -197,7 +198,7 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.width(14.dp))
                         Column {
                             Text("Privasi & Keamanan Lokal", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
-                            Text("Pemrosesan audio offline on-device", style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary))
+                            Text("Suaramu tidak pernah direkam atau disimpan", style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary))
                         }
                     }
                     Text("Terjamin", style = MaterialTheme.typography.labelMedium.copy(color = Primary, fontWeight = FontWeight.Bold))
@@ -205,10 +206,17 @@ fun ProfileScreen(
 
                 HorizontalDivider(color = Color(0xFFE2E8F0))
 
-                // Versi Aplikasi
+                // Versi Aplikasi (Tekan 5x untuk membuka panel demo juri)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable {
+                            demoTapCount++
+                            if (demoTapCount >= 5) {
+                                showDemoPanel = !showDemoPanel
+                                demoTapCount = 0
+                            }
+                        }
                         .padding(16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -217,6 +225,9 @@ fun ProfileScreen(
                         Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = TextSecondary)
                         Spacer(modifier = Modifier.width(14.dp))
                         Text("Versi Aplikasi Suara Rumah v2.0", style = MaterialTheme.typography.bodyMedium.copy(color = TextSecondary))
+                    }
+                    if (demoTapCount in 1..4) {
+                        Text("${5 - demoTapCount}x lagi untuk demo", style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary))
                     }
                 }
             }
@@ -235,97 +246,92 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ── Panel Simulasi Audio (Disembunyikan di Profil untuk Demo Juri) ──
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-            shape = RoundedCornerShape(16.dp)
+        // ── Panel Simulasi Audio (Tersembunyi, hanya aktif jika tap versi 5 kali untuk Juri) ──
+        AnimatedVisibility(
+            visible = showDemoPanel,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showDemoPanel = !showDemoPanel },
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(16.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint = Primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "⚡ Panel Simulasi & Uji Coba (Khusus Demo)",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = Primary)
-                        )
-                    }
-                    Text(
-                        text = if (showDemoPanel) "Tutup ▲" else "Buka ▼",
-                        style = MaterialTheme.typography.bodySmall.copy(color = Primary, fontWeight = FontWeight.Bold)
-                    )
-                }
-
-                AnimatedVisibility(
-                    visible = showDemoPanel,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
-                    Column {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "Simulasikan pemicu suara untuk keperluan pengujian & presentasi kepada dewan juri tanpa bersuara keras:",
-                            style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(
-                                onClick = { dashboardViewModel.simulateNormalAudio() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Primary),
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Suara Normal", style = MaterialTheme.typography.labelSmall)
-                            }
-                            Button(
-                                onClick = { dashboardViewModel.simulateScreamAudio() },
-                                colors = ButtonDefaults.buttonColors(containerColor = AlertWarning),
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Simulasi Teriakan", style = MaterialTheme.typography.labelSmall)
-                            }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "⚡ Panel Simulasi (Khusus Presentasi/Juri)",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = Primary)
+                            )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        TextButton(onClick = { showDemoPanel = false }) {
+                            Text("Tutup", style = MaterialTheme.typography.labelSmall.copy(color = Primary, fontWeight = FontWeight.Bold))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Simulasikan pemicu suara untuk pengujian tanpa bersuara keras:",
+                        style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { dashboardViewModel.simulateNormalAudio() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Button(
-                                onClick = { dashboardViewModel.simulateCrashAudio() },
-                                colors = ButtonDefaults.buttonColors(containerColor = AlertDanger),
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Simulasi Bantingan", style = MaterialTheme.typography.labelSmall)
-                            }
-                            Button(
-                                onClick = { dashboardViewModel.simulateEscalatingAnomaly() },
-                                colors = ButtonDefaults.buttonColors(containerColor = AlertDanger),
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Simulasi SOS Darurat", style = MaterialTheme.typography.labelSmall)
-                            }
+                            Text("Suara Normal", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Button(
+                            onClick = { dashboardViewModel.simulateScreamAudio() },
+                            colors = ButtonDefaults.buttonColors(containerColor = AlertWarning),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Simulasi Teriakan", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { dashboardViewModel.simulateCrashAudio() },
+                            colors = ButtonDefaults.buttonColors(containerColor = AlertDanger),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Simulasi Bantingan", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Button(
+                            onClick = { dashboardViewModel.simulateEscalatingAnomaly() },
+                            colors = ButtonDefaults.buttonColors(containerColor = AlertDanger),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Simulasi SOS Darurat", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }

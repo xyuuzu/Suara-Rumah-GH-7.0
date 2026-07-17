@@ -33,7 +33,7 @@ fun StatusIndicator(
     modifier: Modifier = Modifier
 ) {
     val dotColor = if (isMonitoring) Primary else TextSecondary
-    val labelText = if (isMonitoring) "Memantau aktif" else "Tidak memantau"
+    val labelText = if (isMonitoring) "Aktif Melindungi" else "Sedang Istirahat"
     val labelColor = if (isMonitoring) Primary else TextSecondary
 
     Row(
